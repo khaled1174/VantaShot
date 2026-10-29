@@ -1,0 +1,27 @@
+# macOS and editor metadata
+.DS_Store
+._*
+.codex/
+
+# Swift / Xcode generated files
+.build/
+.swiftpm/
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Rebuildable application bundles and distribution output
+/dist/
+
+# Local credentials, environment files, and signing material
+.env
+.env.*
+!.env.example
+!.env.sample
+*.p12
+*.pfx
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
