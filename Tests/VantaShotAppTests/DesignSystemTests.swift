@@ -57,8 +57,32 @@ final class DesignSystemTests: XCTestCase {
     XCTAssertEqual(second.minY, first.maxY + QuickAccessCardLayout.gap)
   }
 
-  func testQuickAccessAutoDismissIsDisabledAtZero() {
-    XCTAssertNil(QuickAccessCardLayout.autoDismissDuration(settingSeconds: 0))
-    XCTAssertEqual(QuickAccessCardLayout.autoDismissDuration(settingSeconds: 8), 8)
+  func testQuickAccessCardsWrapIntoNextColumnWhenTheScreenIsFull() {
+    let visible = CGRect(x: 0, y: 70, width: 1512, height: 880)
+    let size = CGSize(width: 320, height: 250)
+    // 880 tall fits three cards per column; 1512 wide fits four columns.
+    XCTAssertEqual(QuickAccessCardLayout.capacity(cardSize: size, visibleFrame: visible), 12)
+    let third = QuickAccessCardLayout.frame(index: 2, cardSize: size, visibleFrame: visible)
+    let fourth = QuickAccessCardLayout.frame(index: 3, cardSize: size, visibleFrame: visible)
+    XCTAssertEqual(third.origin.x, 20)
+    XCTAssertLessThanOrEqual(third.maxY, visible.maxY - QuickAccessCardLayout.margin)
+    XCTAssertEqual(fourth.origin, CGPoint(x: 20 + 320 + QuickAccessCardLayout.gap, y: 90))
+    XCTAssertEqual(
+      QuickAccessCardLayout.capacity(cardSize: size, visibleFrame: CGRect(x: 0, y: 0, width: 100, height: 100)),
+      1)
+  }
+
+  @MainActor func testWindowGlassConfiguresTranslucentFullSizeWindow() {
+    _ = NSApplication.shared
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+      styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
+    VantaWindowGlass.configure(window)
+    defer { window.orderOut(nil) }
+    XCTAssertFalse(window.isReleasedWhenClosed)
+    XCTAssertFalse(window.isOpaque)
+    XCTAssertEqual(window.backgroundColor, .clear)
+    XCTAssertTrue(window.titlebarAppearsTransparent)
+    XCTAssertTrue(window.styleMask.contains(.fullSizeContentView))
   }
 }

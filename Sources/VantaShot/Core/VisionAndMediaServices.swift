@@ -25,7 +25,7 @@ import Vision
         throw NSError(
           domain: "VantaShot.OCR", code: 1,
           userInfo: [
-            NSLocalizedDescriptionKey: "لغة OCR غير مدعومة على هذا النظام. راجع الإعدادات."
+            NSLocalizedDescriptionKey: "This OCR language is not supported on this Mac. Check Settings."
           ])
       }
       if !chosen.isEmpty { request.recognitionLanguages = chosen }
@@ -51,7 +51,7 @@ import Vision
         let text = try await recognizer(cg, languages)
         guard !Task.isCancelled, generation == id else { return }
         guard !text.isEmpty else {
-          if showNotification { ToastBannerHUD.shared.show(message: "لم يُعثر على نص واضح") }
+          if showNotification { ToastBannerHUD.shared.show(message: "No clear text was found.") }
           return
         }
         let result = OCRResult(text: text)
@@ -72,7 +72,7 @@ import Vision
   @Published public private(set) var frameCount = 1
   @Published public private(set) var isAutoScrolling = false
   @Published var axis: ScrollAxis = .vertical
-  @Published var status = "حرّك الصفحة ثم أضف إطارًا، أو ابدأ التمرير التلقائي"
+  @Published var status = "Scroll the page, then add a frame, or start automatic scrolling."
   public var onCancel: (() -> Void)?
   private var target: CGRect = .zero
   private var expectedTarget: DisplayCaptureTarget?
@@ -81,6 +81,10 @@ import Vision
   private let regionFrame = RegionFrameWindow()
   var captureFrame: (CGRect) async throws -> NSImage = {
     try await ScreenCaptureService.captureAppKitRect($0)
+  }
+  var isAccessibilityTrusted: () -> Bool = { ScreenCaptureService.hasAccessibilityPermission }
+  var requestAccessibilityPermission: () -> Void = {
+    ScreenCaptureService.requestAccessibilityPermissionAndOpenSettings()
   }
   var isCapturing: Bool { work != nil }
   private var work: Task<Void, Never>?
@@ -143,9 +147,9 @@ import Vision
           mergedImage = NSImage(
             cgImage: s.image, size: NSSize(width: s.image.width, height: s.image.height))
           frameCount += 1
-          status = "تم دمج الإطار"
+          status = "Frame merged."
         } else {
-          status = "لا محتوى جديد؛ لم يُضف إطار مكرر"
+          status = "No new content; a duplicate frame was not added."
           if isAutoScrolling { stopAuto() }
         }
       } catch {
@@ -169,8 +173,9 @@ import Vision
       stopAuto()
       return
     }
-    guard AXIsProcessTrusted() else {
-      status = "يلزم إذن تسهيلات الاستخدام للتمرير التلقائي. يمكنك التمرير يدويًا وإضافة الإطارات."
+    guard isAccessibilityTrusted() else {
+      requestAccessibilityPermission()
+      status = "Accessibility permission is required for automatic scrolling. You can scroll manually and add frames."
       return
     }
     isAutoScrolling = true
@@ -235,37 +240,37 @@ struct ScrollingHUDPanelView: View {
           .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(VantaTheme.Palette.stroke, lineWidth: 1))
       }
       VStack(alignment: .leading, spacing: 2) {
-        Text("\u{2066}\(controller.frameCount)\u{2069} إطار مدمج").font(VantaTheme.Font.label)
+        Text("\(controller.frameCount) \(controller.frameCount == 1 ? "frame" : "frames") stitched").font(VantaTheme.Font.label)
         Text(controller.status).font(VantaTheme.Font.caption)
           .foregroundStyle(VantaTheme.Palette.textSecondary).lineLimit(1).truncationMode(.tail)
       }
       .frame(maxWidth: 150, alignment: .leading)
       Spacer(minLength: 4)
       HStack(spacing: 4) {
-        PillButton(icon: "arrow.up.and.down", help: "تمرير رأسي") { controller.setAxis(.vertical) }
+        PillButton(icon: "arrow.up.and.down", help: "Vertical scroll") { controller.setAxis(.vertical) }
           .opacity(controller.axis == .vertical ? 1 : 0.45)
-        PillButton(icon: "arrow.left.and.right", help: "تمرير أفقي") { controller.setAxis(.horizontal) }
+        PillButton(icon: "arrow.left.and.right", help: "Horizontal scroll") { controller.setAxis(.horizontal) }
           .opacity(controller.axis == .horizontal ? 1 : 0.45)
       }
       .disabled(controller.frameCount > 1)
-      VantaIconButton(title: "إطار", icon: "plus.rectangle.on.rectangle", compact: true) {
+      VantaIconButton(title: "Frame", icon: "plus.rectangle.on.rectangle", compact: true) {
         controller.captureAndStitchNextFrame()
       }
       VantaIconButton(
-        title: controller.isAutoScrolling ? "إيقاف" : "تلقائي",
+        title: controller.isAutoScrolling ? "Stop" : "Auto",
         icon: controller.isAutoScrolling ? "pause.fill" : "play.fill",
         isSelected: controller.isAutoScrolling, compact: true
       ) { controller.toggleAutoScroll() }
-      VantaIconButton(title: "إنهاء", icon: "checkmark", shortcut: "⏎", role: .prominent, compact: true) {
+      VantaIconButton(title: "Finish", icon: "checkmark", shortcut: "⏎", role: .prominent, compact: true) {
         controller.finish()
       }
-      PillButton(icon: "xmark", help: "إلغاء (Esc)") { controller.cancel() }
+      PillButton(icon: "xmark", help: "Cancel (Esc)") { controller.cancel() }
     }
     .padding(.horizontal, 12).padding(.vertical, 8)
     .frame(width: Self.size.width, height: Self.size.height)
     .vantaGlassCard(radius: VantaTheme.Radius.large, shadow: false)
     .foregroundStyle(VantaTheme.Palette.text)
     .preferredColorScheme(.dark)
-    .environment(\.layoutDirection, .rightToLeft)
+    .environment(\.layoutDirection, .leftToRight)
   }
 }

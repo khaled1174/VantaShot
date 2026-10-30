@@ -14,7 +14,7 @@ enum RecordingError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .setup(let s), .encoding(let s): return s
-    case .empty: return "لم يتم تسجيل إطار صالح"
+    case .empty: return "No valid frame was recorded."
     }
   }
 }
@@ -54,7 +54,7 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
       ])
     video.expectsMediaDataInRealTime = true
     super.init()
-    guard writer.canAdd(video) else { throw RecordingError.setup("تعذر إعداد مسار الفيديو") }
+    guard writer.canAdd(video) else { throw RecordingError.setup("Could not set up the video track.") }
     writer.add(video)
     func audio(channels: Int) throws -> AVAssetWriterInput {
       let i = AVAssetWriterInput(
@@ -64,14 +64,14 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
           AVNumberOfChannelsKey: channels, AVEncoderBitRateKey: 128000,
         ])
       i.expectsMediaDataInRealTime = true
-      guard writer.canAdd(i) else { throw RecordingError.setup("تعذر إعداد الصوت") }
+      guard writer.canAdd(i) else { throw RecordingError.setup("Could not set up the audio track.") }
       writer.add(i)
       return i
     }
     if system { systemAudio = try audio(channels: 2) }
     if mic { microphone = try audio(channels: 1) }
     guard writer.startWriting() else {
-      throw writer.error ?? RecordingError.setup("تعذر إنشاء ملف التسجيل")
+      throw writer.error ?? RecordingError.setup("Could not create the recording file.")
     }
   }
   func pause(_ paused: Bool) {
@@ -263,7 +263,7 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
             continuation.resume(returning: (preview, end))
           } else {
             continuation.resume(
-              throwing: self.writer.error ?? RecordingError.encoding("فشل إنهاء ملف الفيديو"))
+              throwing: self.writer.error ?? RecordingError.encoding("Could not finish the video file."))
           }
         }
       }
@@ -293,7 +293,7 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
   private var failureWarning: String?
   @Published private(set) var elapsedSeconds = 0
   @Published private(set) var microphoneLevel: Float = 0
-  @Published private(set) var status = "جارٍ الإعداد…"
+  @Published private(set) var status = "Preparing…"
   public var onCancel: (() -> Void)?
   var onPauseChanged: ((Bool) -> Void)?
   private var writer: MediaWriter?
@@ -378,7 +378,7 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
     generation = UUID()
     let id = generation
     isStarting = true
-    status = "يبدأ التسجيل بعد قليل…"
+    status = "Recording starts in a moment…"
     work = Task { [self] in
       for step in steps {
         guard generation == id, !Task.isCancelled else { return }
@@ -405,17 +405,16 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
     completion = onComplete
     self.format = format
     elapsedSeconds = 0
-    status = "جارٍ الإعداد…"
+    status = "Preparing…"
     isPaused = false
     work = Task { [self] in
       do {
-        guard CGPreflightScreenCaptureAccess() else { throw CaptureError.permissionDenied }
         let mic = AppSettings.shared.microphone && format != "gif"
         let system = AppSettings.shared.systemAudio && format != "gif"
         if mic {
           guard await AVCaptureDevice.requestAccess(for: .audio) else {
             throw RecordingError.setup(
-              "لم يُمنح إذن الميكروفون. يمكنك تعطيله وتسجيل الشاشة دون ميكروفون.")
+              "Microphone permission was not granted. Turn the microphone off to record the screen without it.")
           }
         }
         RecordingDecorations.shared.prepare(region: rect)
@@ -423,8 +422,7 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
           // Freshly ordered-front windows take a moment to be reported on screen by the window server.
           try await Task.sleep(nanoseconds: 250_000_000)
         }
-        let content = try await SCShareableContent.excludingDesktopWindows(
-          false, onScreenWindowsOnly: true)
+        let content = try await ScreenCaptureProvider.shareableContent()
         try Task.checkCancellation()
         guard generation == id else { return }
         let (_, config) = try ScreenCaptureProvider.configuration(
@@ -486,12 +484,12 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
         if mic {
           let session = AVCaptureSession()
           guard let device = AVCaptureDevice.default(for: .audio) else {
-            throw RecordingError.setup("لا يوجد ميكروفون متاح")
+            throw RecordingError.setup("No microphone is available.")
           }
           let input = try AVCaptureDeviceInput(device: device)
           let output = AVCaptureAudioDataOutput()
           guard session.canAddInput(input), session.canAddOutput(output) else {
-            throw RecordingError.setup("الميكروفون غير متاح")
+            throw RecordingError.setup("The microphone is unavailable.")
           }
           session.addInput(input)
           session.addOutput(output)
@@ -507,7 +505,7 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
                 Task { @MainActor in
                   guard let self, self.generation == id else { return }
                   self.audioFailed(
-                    "توقف الميكروفون أو تعذر تشغيله؛ تم إيقاف التسجيل لحفظ الجزء المتاح.")
+                    "The microphone stopped or could not start. Recording stopped so the available part could be saved.")
                 }
               })
           }
@@ -517,12 +515,12 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
             ) { [weak self] _ in
               Task { @MainActor in
                 guard let self, self.generation == id else { return }
-                self.audioFailed("انفصل الميكروفون؛ تم إيقاف التسجيل لحفظ الجزء المتاح.")
+                self.audioFailed("The microphone disconnected. Recording stopped so the available part could be saved.")
               }
             })
           await startMicrophone(session)
           guard session.isRunning, let clock = session.synchronizationClock else {
-            throw RecordingError.setup("تعذر بدء الميكروفون؛ لم يبدأ التسجيل.")
+            throw RecordingError.setup("Could not start the microphone. Recording did not start.")
           }
           w.queue.sync { w.microphoneClock = clock }
           try Task.checkCancellation()
@@ -536,7 +534,7 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
         isStarting = false
         isRecording = true
         regionFrame.show(around: rect, style: .recording)
-        status = "تسجيل \(format.uppercased())"
+        status = "Recording \(format.uppercased())"
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
           Task { @MainActor in
             guard let self, self.isRecording, !self.isPaused else { return }
@@ -591,7 +589,7 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
     isRecording = false
     timer?.invalidate()
     timer = nil
-    status = "جارٍ حفظ الملف…"
+    status = "Saving the file…"
     let id = generation
     let callback = completion
     let format = self.format
@@ -604,14 +602,14 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
         let (preview, duration) = try await writer.finish()
         guard generation == id, !Task.isCancelled else { return }
         completedSource = MediaAsset(
-          kind: .video, title: "تسجيل MP4 قابل للاسترداد", fileURL: writer.url, pixelSize: size,
+          kind: .video, title: "Recoverable MP4 recording", fileURL: writer.url, pixelSize: size,
           duration: duration)
         if writer.queue.sync(execute: { writer.missingMicrophone }) {
-          failureWarning = "لم تصل بيانات الميكروفون؛ الملف يحتوي الجزء المتاح فقط."
+          failureWarning = "No microphone data arrived. The file contains only the available part."
         }
         let png = try AssetFiles.makeImage(
           NSImage(cgImage: preview, size: NSSize(width: preview.width, height: preview.height)),
-          title: "معاينة"
+          title: "Preview"
         ).fileURL
         let output: URL
         if format == "gif" {
@@ -637,7 +635,7 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
         callback?(
           MediaAsset(
             kind: format == "gif" ? .animatedImage : .video,
-            title: warning.map { "تسجيل — \($0)" } ?? "تسجيل \(format.uppercased())",
+            title: warning.map { "Recording — \($0)" } ?? "Recording \(format.uppercased())",
             fileURL: output, previewURL: png, pixelSize: size, duration: duration))
       } catch {
         guard generation == id else { return }
@@ -668,7 +666,7 @@ final class MediaWriter: NSObject, SCStreamOutput, SCStreamDelegate,
   private func fail(_ error: Error) {
     AssetFiles.showError(error)
     if var recovery = completedSource {
-      recovery.title = "ملف MP4 مسترد — تعذر إكمال التصدير"
+      recovery.title = "Recovered MP4 file — export could not be finished"
       writer?.cancel(discardCompleted: false)
       let callback = completion
       removeAudioObservers()
@@ -715,47 +713,47 @@ private struct RecordingSetupView: View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
         Image(systemName: "record.circle").foregroundStyle(VantaTheme.Palette.danger)
-        Text("تسجيل المنطقة").font(VantaTheme.Font.title)
+        Text("Record Area").font(VantaTheme.Font.title)
         Spacer()
-        Text("\u{2066}\(Int(region.width)) × \(Int(region.height))\u{2069} نقطة")
+        Text("\(Int(region.width)) × \(Int(region.height)) pt")
           .font(VantaTheme.Font.number).foregroundStyle(VantaTheme.Palette.textSecondary)
       }
       HStack(spacing: 8) {
         VantaIconButton(
-          title: "فيديو MP4", icon: "film", isSelected: settings.recordFormat == "mp4", compact: true
+          title: "MP4 Video", icon: "film", isSelected: settings.recordFormat == "mp4", compact: true
         ) { settings.recordFormat = "mp4" }
         VantaIconButton(
-          title: "GIF متحرك", icon: "photo.stack", isSelected: settings.recordFormat == "gif",
+          title: "Animated GIF", icon: "photo.stack", isSelected: settings.recordFormat == "gif",
           compact: true
         ) { settings.recordFormat = "gif" }
         Spacer()
         Stepper(
           settings.recordCountdownSeconds == 0
-            ? "بلا عدّاد" : "عدّاد \u{2066}\(settings.recordCountdownSeconds)\u{2069} ث",
+            ? "No countdown" : "\(settings.recordCountdownSeconds)s countdown",
           value: $settings.recordCountdownSeconds, in: 0...10
         ).font(VantaTheme.Font.label)
       }
       HStack(spacing: 16) {
-        Toggle("صوت النظام", isOn: $settings.systemAudio).disabled(settings.recordFormat == "gif")
-        Toggle("الميكروفون", isOn: $settings.microphone).disabled(settings.recordFormat == "gif")
-        Toggle("المؤشر", isOn: $settings.captureCursor)
+        Toggle("System audio", isOn: $settings.systemAudio).disabled(settings.recordFormat == "gif")
+        Toggle("Microphone", isOn: $settings.microphone).disabled(settings.recordFormat == "gif")
+        Toggle("Pointer", isOn: $settings.captureCursor)
       }
       .toggleStyle(.switch).controlSize(.small).font(VantaTheme.Font.label)
       HStack(spacing: 16) {
-        Toggle("هالة المؤشر", isOn: $settings.highlightCursor)
-        Toggle("ضغطات المفاتيح", isOn: $settings.showKeystrokes)
+        Toggle("Pointer highlight", isOn: $settings.highlightCursor)
+        Toggle("Keystrokes", isOn: $settings.showKeystrokes)
         Spacer()
       }
       .toggleStyle(.switch).controlSize(.small).font(VantaTheme.Font.label)
       if settings.recordFormat == "gif" {
-        Text("سيُحفظ GIF متحرك بلا صوت.").font(VantaTheme.Font.caption)
+        Text("The GIF is saved without audio.").font(VantaTheme.Font.caption)
           .foregroundStyle(VantaTheme.Palette.textSecondary)
       }
       HStack {
-        VantaIconButton(title: "إلغاء", icon: "xmark", shortcut: "Esc", role: .destructive, compact: true, action: onCancel)
+        VantaIconButton(title: "Cancel", icon: "xmark", shortcut: "Esc", role: .destructive, compact: true, action: onCancel)
         Spacer()
         VantaIconButton(
-          title: settings.recordFormat == "gif" ? "بدء تسجيل GIF" : "بدء التسجيل", icon: "record.circle.fill",
+          title: settings.recordFormat == "gif" ? "Start GIF Recording" : "Start Recording", icon: "record.circle.fill",
           shortcut: "⏎", role: .prominent, compact: true, action: onStart)
       }
     }
@@ -764,7 +762,7 @@ private struct RecordingSetupView: View {
     .vantaGlassCard(radius: VantaTheme.Radius.large, shadow: false)
     .foregroundStyle(VantaTheme.Palette.text)
     .preferredColorScheme(.dark)
-    .environment(\.layoutDirection, .rightToLeft)
+    .environment(\.layoutDirection, .leftToRight)
     .background(KeyEquivalentCatcher(onReturn: onStart, onEscape: onCancel))
   }
 }
@@ -820,20 +818,17 @@ struct RecordingControlPillView: View {
         .scaleEffect(pulsing && recorder.isRecording && !recorder.isPaused ? 0.7 : 1)
         .animation(VantaTheme.Motion.pulse, value: pulsing)
         .onAppear { pulsing = true }
-      Text(
-        "\u{2066}" + String(format: "%02d:%02d", recorder.elapsedSeconds / 60, recorder.elapsedSeconds % 60)
-          + "\u{2069}"
-      )
+      Text(String(format: "%02d:%02d", recorder.elapsedSeconds / 60, recorder.elapsedSeconds % 60))
       .font(.system(size: 15, weight: .semibold, design: .monospaced))
-      Text(recorder.isPaused ? "متوقف مؤقتًا" : recorder.status).font(VantaTheme.Font.caption)
+      Text(recorder.isPaused ? "Paused" : recorder.status).font(VantaTheme.Font.caption)
         .foregroundStyle(VantaTheme.Palette.textSecondary).lineLimit(1).truncationMode(.tail)
         .layoutPriority(-1)
       if settings.microphone && settings.recordFormat != "gif" {
         MicrophoneLevelView(level: recorder.microphoneLevel)
-          .help("مستوى الميكروفون")
+          .help("Microphone level")
       }
       Spacer(minLength: 4)
-      PillButton(icon: recorder.isPaused ? "play.fill" : "pause.fill", help: recorder.isPaused ? "استئناف" : "إيقاف مؤقت") {
+      PillButton(icon: recorder.isPaused ? "play.fill" : "pause.fill", help: recorder.isPaused ? "Resume" : "Pause") {
         recorder.togglePause()
       }.disabled(!recorder.isRecording)
       Button {
@@ -841,24 +836,26 @@ struct RecordingControlPillView: View {
       } label: {
         HStack(spacing: 5) {
           Image(systemName: "stop.fill")
-          Text("إيقاف وحفظ").font(VantaTheme.Font.label)
+          Text("Stop and Save").font(VantaTheme.Font.label)
         }
         .fixedSize()
         .foregroundStyle(VantaTheme.Palette.accentText)
         .padding(.horizontal, 12).padding(.vertical, 7)
-        .background(Capsule().fill(VantaTheme.Palette.accent))
+        .background(Capsule().fill(VantaTheme.Palette.accentGradient))
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.45), lineWidth: 1))
+        .shadow(color: VantaTheme.Palette.accent.opacity(0.30), radius: 8, y: 2)
       }
       .buttonStyle(.plain)
       .disabled(!recorder.isRecording && !recorder.isStarting)
-      .help("إيقاف التسجيل وحفظه")
-      PillButton(icon: "xmark", help: "إلغاء التسجيل (Esc)") { recorder.cancel() }
+      .help("Stop recording and save")
+      PillButton(icon: "xmark", help: "Cancel recording (Esc)") { recorder.cancel() }
     }
     .padding(.horizontal, 14).padding(.vertical, 8)
     .frame(width: Self.size.width, height: Self.size.height)
     .vantaGlassCard(radius: Self.size.height / 2, shadow: false)
     .foregroundStyle(VantaTheme.Palette.text)
     .preferredColorScheme(.dark)
-    .environment(\.layoutDirection, .rightToLeft)
+    .environment(\.layoutDirection, .leftToRight)
   }
 }
 struct MicrophoneLevelView: View {
@@ -876,8 +873,8 @@ struct MicrophoneLevelView: View {
       }
     }
     .animation(.linear(duration: 0.05), value: level)
-    .accessibilityLabel("مستوى الميكروفون")
-    .accessibilityValue("\(Int(level * 100)) بالمئة")
+    .accessibilityLabel("Microphone level")
+    .accessibilityValue("\(Int(level * 100)) percent")
   }
 }
 struct PillButton: View {
@@ -889,11 +886,24 @@ struct PillButton: View {
     Button(action: action) {
       Image(systemName: icon).font(.system(size: 12, weight: .semibold))
         .frame(width: 30, height: 30)
-        .background(Circle().fill(hovering ? VantaTheme.Palette.fillHover : VantaTheme.Palette.fillSubtle))
-        .overlay(Circle().strokeBorder(VantaTheme.Palette.stroke, lineWidth: 1))
+        .background(
+          Circle().fill(
+            hovering
+              ? VantaTheme.Palette.surfaceHoverGradient
+              : VantaTheme.Palette.surfaceGradient)
+        )
+        .overlay(
+          Circle().strokeBorder(
+            hovering
+              ? AnyShapeStyle(VantaTheme.Palette.accent.opacity(0.55))
+              : AnyShapeStyle(VantaTheme.Palette.surfaceRim),
+            lineWidth: 1)
+        )
+        .scaleEffect(hovering ? 1.05 : 1)
     }
     .buttonStyle(.plain)
     .onHover { hovering = $0 }
+    .animation(VantaTheme.Motion.fade, value: hovering)
     .help(help)
   }
 }
@@ -912,7 +922,7 @@ enum GIFExportService {
       guard
         let dest = CGImageDestinationCreateWithURL(
           url as CFURL, UTType.gif.identifier as CFString, count, nil)
-      else { throw RecordingError.encoding("تعذر إنشاء GIF") }
+      else { throw RecordingError.encoding("Could not create the GIF.") }
       var successful = false
       defer { if !successful { try? FileManager.default.removeItem(at: url) } }
       CGImageDestinationSetProperties(
@@ -928,7 +938,7 @@ enum GIFExportService {
           [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 0.2]] as CFDictionary)
       }
       try Task.checkCancellation()
-      guard CGImageDestinationFinalize(dest) else { throw RecordingError.encoding("فشل إنهاء GIF") }
+      guard CGImageDestinationFinalize(dest) else { throw RecordingError.encoding("Could not finish the GIF.") }
       successful = true
       return url
     }

@@ -7,21 +7,21 @@ public enum AppCommand: String, CaseIterable, Codable, Identifiable, Sendable {
   public var id: String { rawValue }
   public var title: String {
     switch self {
-    case .allInOne: return "الكل في واحد"
-    case .area: return "التقاط منطقة"
-    case .previousArea: return "المنطقة السابقة"
-    case .fullscreen: return "الشاشة كاملة"
-    case .window: return "التقاط نافذة"
-    case .selfTimer: return "مؤقت ذاتي"
-    case .scrolling: return "التقاط متدرج"
-    case .ocr: return "استخراج النص"
-    case .recordToggle: return "بدء / إيقاف التسجيل"
-    case .annotate: return "المحرر"
-    case .clipboard: return "صورة من الحافظة"
-    case .history: return "السجل"
-    case .restore: return "استعادة المغلق"
-    case .hideIcons: return "أيقونات سطح المكتب"
-    case .showLauncher: return "إظهار اللوحة"
+    case .allInOne: return "All in One"
+    case .area: return "Capture Area"
+    case .previousArea: return "Previous Area"
+    case .fullscreen: return "Full Screen"
+    case .window: return "Capture Window"
+    case .selfTimer: return "Self Timer"
+    case .scrolling: return "Scrolling Capture"
+    case .ocr: return "Extract Text"
+    case .recordToggle: return "Start / Stop Recording"
+    case .annotate: return "Editor"
+    case .clipboard: return "Clipboard Image"
+    case .history: return "History"
+    case .restore: return "Restore Closed"
+    case .hideIcons: return "Desktop Icons"
+    case .showLauncher: return "Show Panel"
     }
   }
 }
@@ -147,9 +147,9 @@ public enum StorageError: LocalizedError {
   case invalidData, missingFile, unsupportedVersion
   public var errorDescription: String? {
     switch self {
-    case .invalidData: return "بيانات الملف غير صالحة"
-    case .missingFile: return "ملف الوسائط غير موجود"
-    case .unsupportedVersion: return "إصدار المستند غير مدعوم"
+    case .invalidData: return "The file data is invalid."
+    case .missingFile: return "The media file is missing."
+    case .unsupportedVersion: return "This document version is not supported."
     }
   }
 }
@@ -230,7 +230,7 @@ public actor HistoryStore {
       let backup = rootURL.appendingPathComponent("history-corrupt-\(UUID()).json")
       try FileManager.default.moveItem(at: manifestURL, to: backup)
       var recovered = HistoryManifest()
-      recovered.warning = "تعذر قراءة فهرس السجل. حُفظت نسخة احتياطية، وملفات الوسائط الأصلية باقية."
+      recovered.warning = "Could not read the history index. A backup was saved, and the original media files are still there."
       return recovered
     }
     guard m.schemaVersion == 1 else { throw StorageError.unsupportedVersion }
@@ -307,13 +307,32 @@ public actor HistoryStore {
     }
   }
   public func moveToTrash(_ id: UUID) throws {
+    try moveToTrash([id])
+  }
+  public func moveToTrash(_ ids: [UUID]) throws {
     var m = try load()
-    guard m.entries.contains(where: { $0.id == id }) else { return }
-    var ids = m.deletedItemIDs ?? []
-    if !ids.contains(id) { ids.append(id) }
-    m.deletedItemIDs = ids
-    m.closedItemIDs.removeAll { $0 == id }
+    let targets = ids.filter { id in m.entries.contains { $0.id == id } }
+    guard !targets.isEmpty else { return }
+    var trashed = m.deletedItemIDs ?? []
+    for id in targets where !trashed.contains(id) { trashed.append(id) }
+    m.deletedItemIDs = trashed
+    m.closedItemIDs.removeAll { targets.contains($0) }
     try persist(m)
+  }
+  /// Removes trashed entries and their files from disk. Cannot be undone.
+  @discardableResult public func emptyTrash() throws -> Int {
+    var m = try load()
+    let trashed = Set(m.deletedItemIDs ?? [])
+    let removed = m.entries.filter { trashed.contains($0.id) }
+    guard !removed.isEmpty else { return 0 }
+    m.entries.removeAll { trashed.contains($0.id) }
+    m.deletedItemIDs = []
+    try persist(m)
+    for a in removed {
+      try? FileManager.default.removeItem(at: a.fileURL)
+      if let p = a.previewURL { try? FileManager.default.removeItem(at: p) }
+    }
+    return removed.count
   }
   public func restoreFromTrash(_ id: UUID) throws {
     var m = try load()

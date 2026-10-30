@@ -7,7 +7,7 @@ import VantaShotCore
 
 public enum RenderError: LocalizedError {
   case invalidDocument, allocationFailed, pixelationFailed, missingImage
-  public var errorDescription: String? { "تعذر تركيب الصورة. لم يتم تصدير الأصل غير المعدل." }
+  public var errorDescription: String? { "Could not composite the image. The unmodified original was not exported." }
 }
 public final class DocumentRenderer {
   private let ciContext = CIContext(options: [.cacheIntermediates: false])

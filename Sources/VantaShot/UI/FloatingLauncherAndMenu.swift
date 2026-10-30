@@ -17,7 +17,7 @@ public final class DesktopIconsCoverManager: ObservableObject {
     guard !LiveScreenRecorderController.shared.isRecording,
       !LiveScreenRecorderController.shared.isStarting
     else {
-      ToastBannerHUD.shared.show(message: "غيّر إخفاء الأيقونات قبل بدء التسجيل أو بعد إيقافه")
+      ToastBannerHUD.shared.show(message: "Change icon hiding before you start recording, or after you stop.")
       return
     }
     isHidden ? showIcons() : hideIcons()
@@ -39,8 +39,8 @@ public final class DesktopIconsCoverManager: ObservableObject {
       }
     }
     ToastBannerHUD.shared.show(
-      message: "تم إخفاء أيقونات سطح المكتب",
-      subtitle: "سطح المكتب نظيف وجاهز للتصوير",
+      message: "Desktop icons are hidden",
+      subtitle: "The desktop is clear and ready to capture.",
       icon: "eye.slash.fill"
     )
   }
@@ -84,7 +84,7 @@ public final class DesktopIconsCoverManager: ObservableObject {
     coverWindows.removeAll()
     isHidden = false
     ToastBannerHUD.shared.show(
-      message: "تم إظهار أيقونات سطح المكتب",
+      message: "Desktop icons are visible",
       icon: "eye.fill"
     )
   }
@@ -205,8 +205,8 @@ public final class FloatingPinWindowManager {
     VantaPanelMotion.present(panel, from: CGPoint(x: 0, y: 14))
 
     ToastBannerHUD.shared.show(
-      message: "تم تثبيت الصورة على الشاشة",
-      subtitle: "مرّر فوقها لإظهار الأدوات، وانقر مرتين لفتحها في المحرر",
+      message: "The image is pinned to the screen",
+      subtitle: "Hover to show the tools, and double-click to open it in the editor.",
       icon: "pin.fill"
     )
   }
@@ -245,14 +245,16 @@ struct PinnedFloatingImageView: View {
     .overlay(
       RoundedRectangle(cornerRadius: VantaTheme.Radius.medium, style: .continuous)
         .strokeBorder(
-          hovering ? VantaTheme.Palette.accent.opacity(0.9) : VantaTheme.Palette.strokeStrong,
+          hovering
+            ? AnyShapeStyle(VantaTheme.Palette.accent.opacity(0.95))
+            : AnyShapeStyle(VantaTheme.Palette.specularRim),
           lineWidth: 1.5)
     )
     .animation(VantaTheme.Motion.fade, value: hovering)
     .onHover { hovering = $0 }
     .foregroundStyle(VantaTheme.Palette.text)
     .preferredColorScheme(.dark)
-    .environment(\.layoutDirection, .rightToLeft)
+    .environment(\.layoutDirection, .leftToRight)
   }
 
   private var toolbar: some View {
@@ -267,11 +269,11 @@ struct PinnedFloatingImageView: View {
 
   private func toolbarRow(full: Bool) -> some View {
     HStack(spacing: 6) {
-      PillButton(icon: "xmark", help: "إغلاق", action: onClose)
+      PillButton(icon: "xmark", help: "Close", action: onClose)
       HStack(spacing: 4) {
         Image(systemName: "pin.fill").font(.system(size: 10))
           .foregroundStyle(VantaTheme.Palette.accent)
-        Text("\u{2066}\(title)\u{2069}")
+        Text("\(title)")
           .font(VantaTheme.Font.label).lineLimit(1).truncationMode(.middle)
       }
       .layoutPriority(1)
@@ -280,26 +282,26 @@ struct PinnedFloatingImageView: View {
         Slider(value: $opacity, in: 0.25...1.0)
           .frame(width: 64).controlSize(.mini)
           .onChange(of: opacity) { onOpacity($0) }
-          .help("الشفافية")
-        PillButton(icon: "minus.magnifyingglass", help: "تصغير") {
+          .help("Opacity")
+        PillButton(icon: "minus.magnifyingglass", help: "Zoom Out") {
           zoom = max(0.5, zoom - 0.25)
           onZoom(zoom)
         }
-        PillButton(icon: "plus.magnifyingglass", help: "تكبير") {
+        PillButton(icon: "plus.magnifyingglass", help: "Zoom In") {
           zoom = min(2.0, zoom + 0.25)
           onZoom(zoom)
         }
       }
-      PillButton(icon: locked ? "lock.fill" : "lock.open", help: locked ? "فك القفل" : "قفل الموضع") {
+      PillButton(icon: locked ? "lock.fill" : "lock.open", help: locked ? "Unlock" : "Lock Position") {
         locked.toggle()
         onLock(locked)
       }
-      PillButton(icon: "doc.on.doc", help: "نسخ", action: onCopy)
+      PillButton(icon: "doc.on.doc", help: "Copy", action: onCopy)
       if full {
-        PillButton(icon: "pencil.and.outline", help: "فتح في المحرر", action: onEdit)
+        PillButton(icon: "pencil.and.outline", help: "Open in the Editor", action: onEdit)
       }
       ZStack {
-        PillButton(icon: "hand.draw", help: "اسحب الصورة إلى تطبيق آخر") {}
+        PillButton(icon: "hand.draw", help: "Drag the image to another app") {}
         NativeToolbarDragPill { image }
       }
       .frame(width: 30, height: 30)
@@ -360,9 +362,9 @@ struct PinnedFloatingImageView: View {
       if let images = NSPasteboard.general.readObjects(forClasses: [NSImage.self], options: nil)
         as? [NSImage], let i = images.first
       {
-        AnnotateWindowController.shared.open(with: i, title: "صورة من الحافظة")
+        AnnotateWindowController.shared.open(with: i, title: "Clipboard Image")
       } else {
-        ToastBannerHUD.shared.show(message: "لا توجد صورة في الحافظة")
+        ToastBannerHUD.shared.show(message: "There is no image on the clipboard.")
       }
     case .restore:
       Task {
@@ -370,7 +372,7 @@ struct PinnedFloatingImageView: View {
           if let a = try await store.restoreLastClosed() ?? history.first {
             QuickAccessPopupController.shared.present(asset: a)
           } else {
-            ToastBannerHUD.shared.show(message: "لا توجد لقطة لاستعادتها")
+            ToastBannerHUD.shared.show(message: "There is no capture to restore.")
           }
         } catch { AssetFiles.showError(error) }
       }
@@ -391,7 +393,7 @@ struct PinnedFloatingImageView: View {
   ) {
     OCRService.cancel()
     guard !isBusy else {
-      ToastBannerHUD.shared.show(message: "أكمل العملية الحالية أو ألغها أولًا")
+      ToastBannerHUD.shared.show(message: "Finish or cancel the current action first.")
       return
     }
     currentLease.cancel()
@@ -421,12 +423,12 @@ struct PinnedFloatingImageView: View {
           }
           let image = try await ScreenCaptureProvider.capture(target: target)
           guard session.id == id else { return }
-          handle(.quickAccess(image, "المنطقة السابقة"), id: id)
+          handle(.quickAccess(image, "Previous Area"), id: id)
         } else if countdown > 0 {
           guard let fixedDisplayTarget else { throw CaptureError.noDisplay }
           let image = try await ScreenCaptureProvider.capture(target: fixedDisplayTarget)
           guard session.id == id else { return }
-          handle(.quickAccess(image, "لقطة بمؤقت"), id: id)
+          handle(.quickAccess(image, "Timer Capture"), id: id)
         } else {
           SelectionOverlayController.shared.onCancelled = { [weak self] in self?.finish(id) }
           SelectionOverlayController.shared.present(initialMode: mode) { [weak self] r in
@@ -456,11 +458,13 @@ struct PinnedFloatingImageView: View {
     LiveScreenRecorderController.shared.cancel()
     session.cancel()
     ToastBannerHUD.shared.hide()
+    QuickAccessPopupController.shared.showAfterCapture()
     showLauncherWindow()
   }
   private func finish(_ id: UUID) {
     guard session.finish(id) else { return }
     pending = nil
+    QuickAccessPopupController.shared.showAfterCapture()
     showLauncherWindow()
   }
   private func handle(_ result: SelectionOverlayController.CaptureResultAction, id: UUID) {
@@ -471,7 +475,7 @@ struct PinnedFloatingImageView: View {
       LiveScrollingCaptureController.shared.onCancel = { [weak self] in self?.finish(id) }
       LiveScrollingCaptureController.shared.start(rectInAppKit: r.rect, initialImage: i, target: r)
       {
-        [weak self] image in self?.handle(.quickAccess(image, "لقطة تمرير طويلة"), id: id)
+        [weak self] image in self?.handle(.quickAccess(image, "Scrolling Capture"), id: id)
       }
     case .startRecording(let r):
       session.transition(.recording, id: id)
@@ -493,16 +497,16 @@ struct PinnedFloatingImageView: View {
         title = t
       case .copyDirectly(let i):
         image = i
-        title = "نسخ مباشر"
+        title = "Copied"
       case .saveDirectly(let i):
         image = i
-        title = "حفظ مباشر"
+        title = "Saved"
       case .pinDirectly(let i):
         image = i
-        title = "لقطة مثبتة"
+        title = "Pinned Capture"
       case .ocrDirectly(let i):
         image = i
-        title = "استخراج النص"
+        title = "Extract Text"
       default: return
       }
       do {
@@ -552,11 +556,34 @@ struct PinnedFloatingImageView: View {
       }
     }
   }
-  func trash(_ asset: MediaAsset) {
+  func trash(_ asset: MediaAsset) { trash([asset]) }
+  func trash(_ assets: [MediaAsset]) {
+    guard !assets.isEmpty else { return }
     Task {
       do {
-        try await store.moveToTrash(asset.id)
+        try await store.moveToTrash(assets.map(\.id))
         await loadHistory()
+      } catch { AssetFiles.showError(error) }
+    }
+  }
+  /// Asks first, then deletes the trashed files from disk for good.
+  func confirmEmptyTrash() {
+    let count = trashedHistory.count
+    guard count > 0 else { return }
+    let alert = NSAlert()
+    alert.alertStyle = .warning
+    alert.messageText = "Permanently delete \(count) \(count == 1 ? "item" : "items")?"
+    alert.informativeText = "The files are removed from this Mac. You can't undo this."
+    alert.addButton(withTitle: "Delete")
+    alert.addButton(withTitle: "Cancel")
+    alert.buttons.first?.hasDestructiveAction = true
+    guard alert.runModal() == .alertFirstButtonReturn else { return }
+    Task {
+      do {
+        let removed = try await store.emptyTrash()
+        await loadHistory()
+        ToastBannerHUD.shared.show(
+          message: "Deleted \(removed) \(removed == 1 ? "item" : "items") from this Mac", icon: "trash")
       } catch { AssetFiles.showError(error) }
     }
   }
@@ -593,9 +620,8 @@ struct PinnedFloatingImageView: View {
         defer: false)
       w.isReleasedWhenClosed = false
       w.minSize = NSSize(width: 680, height: 460)
-      w.title = "سجل VantaShot"
-      w.titlebarAppearsTransparent = true
-      w.backgroundColor = NSColor(red: 0.06, green: 0.075, blue: 0.12, alpha: 1)
+      w.title = "VantaShot History"
+      VantaWindowGlass.configure(w)
       let host = QuickLookHostView(frame: NSRect(x: 0, y: 0, width: 900, height: 620))
       host.autoresizingMask = [.width, .height]
       let hosting = NSHostingView(rootView: CaptureHistoryWindowView(coordinator: self))
@@ -635,7 +661,7 @@ struct CaptureHistoryWindowView: View {
   static let dateFormatter: DateFormatter = {
     let f = DateFormatter()
     f.calendar = Calendar(identifier: .gregorian)
-    f.locale = Locale(identifier: "ar")
+    f.locale = Locale(identifier: "en_US")
     f.dateStyle = .medium
     f.timeStyle = .short
     return f
@@ -647,7 +673,7 @@ struct CaptureHistoryWindowView: View {
   var body: some View {
     VStack(spacing: 0) {
       toolbar
-      if !selection.isEmpty { selectionBar }
+      if selection.isSelecting || !selection.isEmpty { selectionBar }
       if items.isEmpty {
         emptyState
       } else {
@@ -657,6 +683,7 @@ struct CaptureHistoryWindowView: View {
               HistoryCard(
                 asset: a, dateText: Self.dateFormatter.string(from: a.date),
                 isSelected: selection.contains(a.id),
+                showsCheckbox: selection.isSelecting,
                 dragURLs: { selection.contains(a.id) ? selectedURLs : [a.fileURL] },
                 onClick: { command, shift in
                   selection.click(a.id, in: items.map(\.id), command: command, shift: shift)
@@ -676,16 +703,16 @@ struct CaptureHistoryWindowView: View {
           .padding(16)
         }
         .contentShape(Rectangle())
-        .onTapGesture { selection.clear() }
+        .onTapGesture { if !selection.isSelecting { selection.clear() } }
       }
     }
     .background(WindowKeyCatcher(handler: handleKey))
     .onChange(of: coordinator.history) { _ in selection.prune(keeping: items.map(\.id)) }
     .onChange(of: filter) { _ in selection.prune(keeping: items.map(\.id)) }
-    .background(Color(red: 0.06, green: 0.075, blue: 0.12))
+    .vantaWindowBackground()
     .foregroundStyle(VantaTheme.Palette.text)
     .preferredColorScheme(.dark)
-    .environment(\.layoutDirection, .rightToLeft)
+    .environment(\.layoutDirection, .leftToRight)
     .frame(minWidth: 660, minHeight: 420)
   }
 
@@ -693,33 +720,46 @@ struct CaptureHistoryWindowView: View {
     HStack(spacing: 12) {
       HStack(spacing: 6) {
         Image(systemName: "magnifyingglass").foregroundStyle(VantaTheme.Palette.textSecondary)
-        TextField("ابحث بالعنوان أو النوع", text: $filter.query).textFieldStyle(.plain)
+        TextField("Search by title or type", text: $filter.query).textFieldStyle(.plain)
         if !filter.query.isEmpty {
           Button { filter.query = "" } label: { Image(systemName: "xmark.circle.fill") }
             .buttonStyle(.plain).foregroundStyle(VantaTheme.Palette.textSecondary)
         }
       }
       .padding(.horizontal, 10).padding(.vertical, 6)
-      .background(
-        RoundedRectangle(cornerRadius: VantaTheme.Radius.small, style: .continuous)
-          .fill(VantaTheme.Palette.fillSubtle))
+      .vantaSurfaceCard(radius: VantaTheme.Radius.small)
       .frame(maxWidth: 300)
       Picker("", selection: $filter.kind) {
-        Text("الكل").tag(MediaKind?.none)
-        Text("صورة").tag(MediaKind?.some(.stillImage))
+        Text("All").tag(MediaKind?.none)
+        Text("Image").tag(MediaKind?.some(.stillImage))
         Text("GIF").tag(MediaKind?.some(.animatedImage))
-        Text("فيديو").tag(MediaKind?.some(.video))
+        Text("Video").tag(MediaKind?.some(.video))
       }.pickerStyle(.segmented).frame(width: 260)
       Spacer()
-      Text("\u{2066}\(items.count)\u{2069} عنصر").font(VantaTheme.Font.caption)
+      Text("\(items.count) \(items.count == 1 ? "item" : "items")").font(VantaTheme.Font.caption)
         .foregroundStyle(VantaTheme.Palette.textSecondary)
+      VantaIconButton(title: "Select All", icon: "checkmark.circle.fill", shortcut: "⌘A", compact: true) {
+        selectAll()
+      }
+      .disabled(items.isEmpty)
+      VantaIconButton(
+        title: selection.isSelecting ? "Done" : "Select",
+        icon: selection.isSelecting ? "xmark.circle" : "checkmark.circle",
+        role: selection.isSelecting ? .prominent : .neutral, compact: true
+      ) {
+        if selection.isSelecting { selection.endSelecting() } else { selection.isSelecting = true }
+        HistoryQuickLook.shared.update(urls: selectedURLs)
+      }
+      .disabled(items.isEmpty && !selection.isSelecting)
       if !coordinator.trashedHistory.isEmpty {
         Menu {
           ForEach(coordinator.trashedHistory) { a in
             Button(a.title) { coordinator.restoreTrash(a) }
           }
+          Divider()
+          Button("Empty Trash…", role: .destructive) { coordinator.confirmEmptyTrash() }
         } label: {
-          Label("استعادة (\u{2066}\(coordinator.trashedHistory.count)\u{2069})", systemImage: "trash.slash")
+          Label("Restore (\(coordinator.trashedHistory.count))", systemImage: "trash.slash")
         }
         .menuStyle(.borderlessButton).fixedSize()
       }
@@ -729,20 +769,25 @@ struct CaptureHistoryWindowView: View {
 
   private var selectionBar: some View {
     HStack(spacing: 8) {
-      Text("\u{2066}\(selection.ids.count)\u{2069} محدد").font(VantaTheme.Font.label)
+      Text(
+        selection.isEmpty
+          ? "Click items to select them" : "\(selection.ids.count) of \(items.count) selected"
+      ).font(VantaTheme.Font.label)
       Spacer()
-      VantaIconButton(title: "معاينة", icon: "eye", shortcut: "␣", compact: true) {
+      VantaIconButton(title: "Preview", icon: "eye", shortcut: "␣", compact: true) {
         HistoryQuickLook.shared.toggle(urls: selectedURLs)
       }
-      VantaIconButton(title: "نسخ", icon: "doc.on.doc", shortcut: "⌘C", compact: true) { copySelection() }
-      VantaIconButton(title: "حفظ", icon: "square.and.arrow.down", compact: true) { saveSelection() }
-      VantaIconButton(title: "حذف", icon: "trash", shortcut: "⌫", role: .destructive, compact: true) {
+      VantaIconButton(title: "Copy", icon: "doc.on.doc", shortcut: "⌘C", compact: true) { copySelection() }
+      VantaIconButton(title: "Save", icon: "square.and.arrow.down", compact: true) { saveSelection() }
+      VantaIconButton(title: "Delete", icon: "trash", shortcut: "⌫", role: .destructive, compact: true) {
         trashSelection()
       }
-      PillButton(icon: "xmark", help: "إلغاء التحديد (Esc)") { selection.clear() }
+      .disabled(selection.isEmpty)
+      PillButton(icon: "xmark", help: "Clear Selection (Esc)") { selection.endSelecting() }
     }
-    .padding(.horizontal, 16).padding(.vertical, 8)
-    .background(VantaTheme.Palette.fillSubtle)
+    .padding(.horizontal, 14).padding(.vertical, 8)
+    .vantaSurfaceCard(radius: VantaTheme.Radius.medium, isSelected: true)
+    .padding(.horizontal, 16).padding(.bottom, 6)
     .transition(.move(edge: .top).combined(with: .opacity))
   }
 
@@ -754,8 +799,7 @@ struct CaptureHistoryWindowView: View {
       HistoryQuickLook.shared.toggle(urls: selectedURLs)
       return true
     case (0, true):  // ⌘A
-      selection.selectAll(items.map(\.id))
-      HistoryQuickLook.shared.update(urls: selectedURLs)
+      selectAll()
       return true
     case (8, true):  // ⌘C
       guard !selection.isEmpty else { return false }
@@ -766,8 +810,8 @@ struct CaptureHistoryWindowView: View {
       trashSelection()
       return true
     case (53, false):  // esc
-      guard !selection.isEmpty else { return false }
-      selection.clear()
+      guard selection.isSelecting || !selection.isEmpty else { return false }
+      selection.endSelecting()
       return true
     default: return false
     }
@@ -782,7 +826,7 @@ struct CaptureHistoryWindowView: View {
     }
     NSPasteboard.general.clearContents()
     NSPasteboard.general.writeObjects(urls as [NSURL])
-    ToastBannerHUD.shared.show(message: "نُسخت \u{2066}\(urls.count)\u{2069} ملفات إلى الحافظة", icon: "doc.on.doc")
+    ToastBannerHUD.shared.show(message: "Copied \(urls.count) \(urls.count == 1 ? "file" : "files") to the clipboard", icon: "doc.on.doc")
   }
   private func saveSelection() {
     var saved = 0
@@ -794,22 +838,31 @@ struct CaptureHistoryWindowView: View {
     }
     if saved > 0 {
       ToastBannerHUD.shared.show(
-        message: "حُفظت \u{2066}\(saved)\u{2069} عناصر", subtitle: AppSettings.shared.outputPath,
+        message: "Saved \(saved) \(saved == 1 ? "item" : "items")", subtitle: AppSettings.shared.outputPath,
         icon: "square.and.arrow.down")
     }
   }
+  private func selectAll() {
+    selection.selectAll(items.map(\.id))
+    HistoryQuickLook.shared.update(urls: selectedURLs)
+  }
   private func trashSelection() {
-    for a in selectedAssets { coordinator.trash(a) }
-    selection.clear()
+    let assets = selectedAssets
+    guard !assets.isEmpty else { return }
+    coordinator.trash(assets)
+    selection.endSelecting()
+    ToastBannerHUD.shared.show(
+      message: "Moved \(assets.count) \(assets.count == 1 ? "item" : "items") to Trash",
+      subtitle: "Use Restore to bring them back, or Empty Trash to delete the files.", icon: "trash")
   }
 
   private var emptyState: some View {
     VStack(spacing: 10) {
       Image(systemName: coordinator.history.isEmpty ? "camera.viewfinder" : "magnifyingglass")
         .font(.system(size: 34, weight: .light)).foregroundStyle(VantaTheme.Palette.textSecondary)
-      Text(coordinator.history.isEmpty ? "لا توجد لقطات محفوظة بعد" : "لا نتائج مطابقة")
+      Text(coordinator.history.isEmpty ? "No saved captures yet" : "No matching results")
         .font(VantaTheme.Font.title)
-      Text(coordinator.history.isEmpty ? "كل ما تلتقطه يظهر هنا تلقائيًا" : "جرّب كلمة أخرى أو أزل التصفية")
+      Text(coordinator.history.isEmpty ? "Everything you capture shows up here." : "Try another word, or clear the filter.")
         .font(VantaTheme.Font.body).foregroundStyle(VantaTheme.Palette.textSecondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -832,6 +885,7 @@ struct HistoryCard: View {
   let asset: MediaAsset
   let dateText: String
   var isSelected = false
+  var showsCheckbox = false
   var dragURLs: () -> [URL] = { [] }
   var onClick: (_ command: Bool, _ shift: Bool) -> Void = { _, _ in }
   let onOpen: () -> Void
@@ -860,7 +914,7 @@ struct HistoryCard: View {
           Image(systemName: asset.kind.icon).font(.system(size: 9, weight: .bold))
           Text(asset.kind.friendlyName).font(.system(size: 10, weight: .bold))
           if let d = asset.duration, d > 0 {
-            Text("\u{2066}" + String(format: "%d:%02d", Int(d) / 60, Int(d) % 60) + "\u{2069}")
+            Text(String(format: "%d:%02d", Int(d) / 60, Int(d) % 60))
               .font(VantaTheme.Font.number)
           }
         }
@@ -869,15 +923,25 @@ struct HistoryCard: View {
         .padding(6)
         .allowsHitTesting(false)
       }
+      .overlay(alignment: .topTrailing) {
+        if showsCheckbox {
+          Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+            .font(.system(size: 20, weight: .semibold))
+            .foregroundStyle(isSelected ? VantaTheme.Palette.accent : Color.white.opacity(0.85))
+            .background(Circle().fill(Color.black.opacity(0.45)).padding(1))
+            .padding(8)
+            .allowsHitTesting(false)
+        }
+      }
       .clipShape(RoundedRectangle(cornerRadius: VantaTheme.Radius.small, style: .continuous))
       HStack {
         Text(asset.title).font(VantaTheme.Font.body).lineLimit(1)
         Spacer(minLength: 4)
         HStack(spacing: 4) {
-          PillButton(icon: "pencil.and.outline", help: "فتح", action: onOpen)
-          PillButton(icon: "doc.on.doc", help: "نسخ", action: onCopy)
-          PillButton(icon: "rectangle.on.rectangle", help: "بطاقة الوصول السريع", action: onCard)
-          PillButton(icon: "trash", help: "حذف", action: onTrash)
+          PillButton(icon: "pencil.and.outline", help: "Open", action: onOpen)
+          PillButton(icon: "doc.on.doc", help: "Copy", action: onCopy)
+          PillButton(icon: "rectangle.on.rectangle", help: "Quick access card", action: onCard)
+          PillButton(icon: "trash", help: "Delete", action: onTrash)
         }
         .scaleEffect(0.8)
         .opacity(hovering ? 1 : 0)
@@ -886,26 +950,22 @@ struct HistoryCard: View {
       HStack {
         Text(dateText).font(VantaTheme.Font.caption).foregroundStyle(VantaTheme.Palette.textSecondary)
         Spacer()
-        Text("\u{2066}\(asset.pixelSize.width) × \(asset.pixelSize.height)\u{2069}")
+        Text("\(asset.pixelSize.width) × \(asset.pixelSize.height)")
           .font(VantaTheme.Font.number).foregroundStyle(VantaTheme.Palette.textSecondary)
       }
       if missing {
-        Label("الملف غير متاح", systemImage: "exclamationmark.triangle")
+        Label("File unavailable", systemImage: "exclamationmark.triangle")
           .font(VantaTheme.Font.caption).foregroundStyle(VantaTheme.Palette.warning)
       }
     }
     .padding(10)
-    .vantaGlassCard(radius: VantaTheme.Radius.medium, shadow: false)
-    .overlay(
-      RoundedRectangle(cornerRadius: VantaTheme.Radius.medium, style: .continuous)
-        .strokeBorder(
-          isSelected
-            ? VantaTheme.Palette.accent : hovering ? VantaTheme.Palette.accent.opacity(0.45) : .clear,
-          lineWidth: isSelected ? 2 : 1)
+    .vantaSurfaceCard(
+      radius: VantaTheme.Radius.medium,
+      isSelected: isSelected,
+      isHovering: hovering,
+      shadow: true
     )
-    .background(
-      RoundedRectangle(cornerRadius: VantaTheme.Radius.medium, style: .continuous)
-        .fill(isSelected ? VantaTheme.Palette.accent.opacity(0.12) : .clear))
+    .scaleEffect(hovering ? 1.012 : 1)
     .animation(VantaTheme.Motion.fade, value: hovering)
     .animation(VantaTheme.Motion.fade, value: isSelected)
     .onHover { hovering = $0 }

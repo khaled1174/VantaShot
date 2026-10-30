@@ -8,22 +8,37 @@ import VantaShotRendering
 @MainActor
 public final class AnnotateWindowController: ObservableObject {
   public static let shared = AnnotateWindowController()
+  public static let projectContentType =
+    UTType(importedAs: "dev.vantashot.project", conformingTo: .json)
   private var window: NSWindow?
   private var source: CGImage?
   private var history = DocumentHistory(AnnotationDocument(size: PixelSize(width: 1, height: 1)))
   private let renderer = DocumentRenderer()
+  private var isSyncingSelection = false
   @Published public private(set) var document = AnnotationDocument(
     size: PixelSize(width: 1, height: 1))
-  @Published public var documentTitle = "تعديل اللقطة"
+  @Published public var documentTitle = "Edit Capture"
   @Published public var selectedTool: AnnotationTool = .arrow
   @Published public var selectedID: UUID?
   @Published public var showBackgroundBar = true
-  @Published public var activeColor: Color = .red
-  @Published public var strokeWidth: CGFloat = 5
-  @Published var fontFamily = "Helvetica"
-  @Published public var fontSize: CGFloat = 32
-  @Published public var customText = "ملاحظة"
-  @Published public var doubleArrow = false
+  @Published public var activeColor: Color = .red {
+    didSet { if !isSyncingSelection, selectedID != nil { updateSelection() } }
+  }
+  @Published public var strokeWidth: CGFloat = 5 {
+    didSet { if !isSyncingSelection, selectedID != nil { updateSelection() } }
+  }
+  @Published var fontFamily = "Helvetica" {
+    didSet { if !isSyncingSelection, selectedID != nil { updateSelection() } }
+  }
+  @Published public var fontSize: CGFloat = 32 {
+    didSet { if !isSyncingSelection, selectedID != nil { updateSelection() } }
+  }
+  @Published public var customText = "Note" {
+    didSet { if !isSyncingSelection, selectedID != nil { updateSelection() } }
+  }
+  @Published public var doubleArrow = false {
+    didSet { if !isSyncingSelection, selectedID != nil { updateSelection() } }
+  }
   @Published public private(set) var preview: NSImage?
   @Published public private(set) var errorMessage: String?
   public var canUndo: Bool { history.canUndo }
@@ -53,8 +68,7 @@ public final class AnnotateWindowController: ObservableObject {
         defer: false)
       w.isReleasedWhenClosed = false
       w.minSize = NSSize(width: 960, height: 650)
-      w.titlebarAppearsTransparent = true
-      w.backgroundColor = NSColor(red: 0.06, green: 0.075, blue: 0.12, alpha: 1)
+      VantaWindowGlass.configure(w)
       w.center()
       w.contentView = NSHostingView(rootView: AnnotateEditorRootView(controller: self))
       window = w
@@ -112,6 +126,8 @@ public final class AnnotateWindowController: ObservableObject {
   public func select(_ id: UUID?) {
     selectedID = id
     if let o = document.objects.first(where: { $0.id == id }) {
+      isSyncingSelection = true
+      defer { isSyncingSelection = false }
       activeColor = Color(
         red: o.color.red, green: o.color.green, blue: o.color.blue, opacity: o.color.alpha)
       strokeWidth = o.lineWidth
@@ -177,7 +193,10 @@ public final class AnnotateWindowController: ObservableObject {
   public func saveProject() {
     guard let source else { return }
     let p = NSSavePanel()
-    p.nameFieldStringValue = "مستند.vantashot"
+    p.allowedContentTypes = [
+      UTType(filenameExtension: "vantashot") ?? Self.projectContentType
+    ]
+    p.nameFieldStringValue = "Document.vantashot"
     p.canCreateDirectories = true
     guard p.runModal() == .OK, let url = p.url else { return }
     do {
@@ -277,36 +296,78 @@ struct AnnotateEditorRootView: View {
   var body: some View {
     VStack(spacing: 0) {
       topBar
+      Divider().overlay(Color.white.opacity(0.10))
       HStack(spacing: 0) {
         toolsColumn
-        EditorCanvas(controller: controller).background(Color.black.opacity(0.3)).clipped()
-        inspector.frame(width: 236)
+        Divider().overlay(Color.white.opacity(0.08))
+        EditorCanvas(controller: controller)
+          .background(Color.black.opacity(0.28))
+          .clipped()
+        Divider().overlay(Color.white.opacity(0.08))
+        inspector.frame(width: 244)
       }
+      Divider().overlay(Color.white.opacity(0.10))
       statusBar
     }
-    .background(Color(red: 0.06, green: 0.075, blue: 0.12))
+    .background(WindowKeyCatcher(handler: handleKey))
+    .vantaWindowBackground()
     .foregroundStyle(VantaTheme.Palette.text)
     .preferredColorScheme(.dark)
-    .environment(\.layoutDirection, .rightToLeft)
+    .environment(\.layoutDirection, .leftToRight)
     .onAppear { showBackground = controller.document.background.enabled }
+  }
+
+  private func handleKey(_ e: NSEvent) -> Bool {
+    let cmd = e.modifierFlags.contains(.command)
+    let shift = e.modifierFlags.contains(.shift)
+    if cmd {
+      switch e.charactersIgnoringModifiers?.lowercased() {
+      case "c":
+        controller.copy()
+        return true
+      case "s":
+        controller.save()
+        return true
+      case "z":
+        shift ? controller.redo() : controller.undo()
+        return true
+      default:
+        return false
+      }
+    }
+    switch e.keyCode {
+    case 51, 117:
+      guard controller.selectedID != nil else { return false }
+      controller.deleteSelection()
+      return true
+    case 53:
+      guard controller.selectedID != nil else { return false }
+      controller.select(nil)
+      return true
+    default:
+      return false
+    }
   }
 
   private var topBar: some View {
     HStack(spacing: 8) {
-      Text("\u{2066}\(controller.documentTitle)\u{2069}").font(VantaTheme.Font.title).lineLimit(1)
+      Text("\(controller.documentTitle)").font(VantaTheme.Font.title).lineLimit(1)
         .truncationMode(.middle).frame(maxWidth: 260, alignment: .leading)
       Spacer()
-      PillButton(icon: "arrow.uturn.backward", help: "تراجع ⌘Z", action: controller.undo)
+      PillButton(icon: "arrow.uturn.backward", help: "Undo ⌘Z", action: controller.undo)
         .disabled(!controller.canUndo).opacity(controller.canUndo ? 1 : 0.4)
-      PillButton(icon: "arrow.uturn.forward", help: "إعادة ⇧⌘Z", action: controller.redo)
+      PillButton(icon: "arrow.uturn.forward", help: "Redo ⇧⌘Z", action: controller.redo)
         .disabled(!controller.canRedo).opacity(controller.canRedo ? 1 : 0.4)
-      PillButton(icon: "trash", help: "حذف العنصر المحدد ⌫", action: controller.deleteSelection)
+      PillButton(icon: "trash", help: "Delete the selected item ⌫", action: controller.deleteSelection)
         .disabled(controller.selectedID == nil).opacity(controller.selectedID == nil ? 0.4 : 1)
-      PillButton(icon: "eraser", help: "مسح كل التعليقات", action: controller.clearAll)
+      PillButton(icon: "eraser", help: "Clear all annotations", action: controller.clearAll)
       Menu {
-        Button("حفظ مشروع قابل للتحرير…", action: controller.saveProject)
-        Button("فتح مشروع…") {
+        Button("Save Editable Project…", action: controller.saveProject)
+        Button("Open Project…") {
           let p = NSOpenPanel()
+          if let extType = UTType(filenameExtension: "vantashot") {
+            p.allowedContentTypes = [extType]
+          }
           if p.runModal() == .OK, let u = p.url { controller.openProject(u) }
         }
       } label: {
@@ -315,19 +376,25 @@ struct AnnotateEditorRootView: View {
       .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 30, height: 30)
       .background(Circle().fill(VantaTheme.Palette.fillSubtle))
       .overlay(Circle().strokeBorder(VantaTheme.Palette.stroke, lineWidth: 1))
-      .help("المستند")
+      .help("Document")
       Divider().frame(height: 22)
-      VantaIconButton(title: "حفظ", icon: "square.and.arrow.down", shortcut: "⌘S", compact: true, action: controller.save)
-      VantaIconButton(title: "نسخ", icon: "doc.on.doc", shortcut: "⌘C", role: .prominent, compact: true, action: controller.copy)
+      VantaIconButton(title: "Save", icon: "square.and.arrow.down", shortcut: "⌘S", compact: true, action: controller.save)
+      VantaIconButton(title: "Copy", icon: "doc.on.doc", shortcut: "⌘C", role: .prominent, compact: true, action: controller.copy)
       ZStack {
-        VantaIconButton(title: "اسحب", icon: "hand.draw", compact: true) {}
+        VantaIconButton(title: "Drag", icon: "hand.draw", compact: true) {}
         NativeToolbarDragPill { controller.renderedForDrag() }
       }
       .frame(width: 64, height: 46)
-      .help("اسحب الصورة النهائية إلى أي تطبيق")
+      .help("Drag the finished image to any app")
     }
     .padding(.horizontal, 14).padding(.top, 30).padding(.bottom, 10)
-    .background(Color.white.opacity(0.03))
+    .background(
+      LinearGradient(
+        colors: [Color.white.opacity(0.07), Color.white.opacity(0.02)],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+    )
   }
 
   private var toolsColumn: some View {
@@ -341,20 +408,22 @@ struct AnnotateEditorRootView: View {
       }
       Spacer()
     }
-    .padding(10).frame(width: 102)
-    .background(Color.white.opacity(0.02))
+    .padding(10).frame(width: 104)
+    .background(Color.white.opacity(0.03))
   }
 
   private var statusBar: some View {
     HStack {
       Text(
         controller.errorMessage
-          ?? "\u{2066}\(Int(controller.document.cropRect.width)) × \(Int(controller.document.cropRect.height))\u{2069} بكسل • \(controller.selectedTool.title)"
+          ?? "\(Int(controller.document.cropRect.width)) × \(Int(controller.document.cropRect.height)) px • \(controller.selectedTool.title)"
       ).font(VantaTheme.Font.caption).foregroundStyle(VantaTheme.Palette.textSecondary)
       Spacer()
-      Text("⌘Z تراجع • ⇧⌘Z إعادة • Esc إلغاء التحديد").font(VantaTheme.Font.caption)
+      Text("⌘Z Undo • ⇧⌘Z Redo • Esc clears the selection").font(VantaTheme.Font.caption)
         .foregroundStyle(VantaTheme.Palette.textSecondary)
-    }.padding(.horizontal, 14).padding(.vertical, 8)
+    }
+    .padding(.horizontal, 14).padding(.vertical, 8)
+    .background(Color.black.opacity(0.18))
   }
 
   private var inspector: some View {
@@ -370,28 +439,41 @@ struct AnnotateEditorRootView: View {
           Text(hint(for: controller.selectedTool)).font(VantaTheme.Font.caption)
             .foregroundStyle(VantaTheme.Palette.textSecondary)
         }
-        if sections.contains(.color) { colorSection }
-        if sections.contains(.stroke) {
-          sliderRow("السُمك", value: $controller.strokeWidth, range: 1...32)
+        if sections.contains(.color) {
+          colorSection
+            .padding(10)
+            .vantaSurfaceCard(radius: VantaTheme.Radius.small)
         }
-        if sections.contains(.text) { textSection }
+        if sections.contains(.stroke) {
+          sliderRow("Thickness", value: $controller.strokeWidth, range: 1...32)
+            .padding(10)
+            .vantaSurfaceCard(radius: VantaTheme.Radius.small)
+        }
+        if sections.contains(.text) {
+          textSection
+            .padding(10)
+            .vantaSurfaceCard(radius: VantaTheme.Radius.small)
+        }
         if sections.contains(.arrowStyle) {
-          Toggle("سهم بطرفين", isOn: $controller.doubleArrow).toggleStyle(.switch).controlSize(.small)
+          Toggle("Arrow on both ends", isOn: $controller.doubleArrow).toggleStyle(.switch).controlSize(.small)
+            .padding(10)
+            .vantaSurfaceCard(radius: VantaTheme.Radius.small)
         }
         if controller.selectedID != nil && !sections.isEmpty {
-          VantaIconButton(title: "تطبيق على المحدد", icon: "checkmark", compact: true, action: controller.updateSelection)
+          VantaIconButton(title: "Apply to Selection", icon: "checkmark", compact: true, action: controller.updateSelection)
         }
-        Divider().padding(.vertical, 2)
         backgroundSection
+          .padding(10)
+          .vantaSurfaceCard(radius: VantaTheme.Radius.small)
       }
-      .padding(14)
+      .padding(12)
     }
     .background(Color.white.opacity(0.035))
   }
 
   private var colorSection: some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text("اللون").font(VantaTheme.Font.label).foregroundStyle(VantaTheme.Palette.textSecondary)
+      Text("Color").font(VantaTheme.Font.label).foregroundStyle(VantaTheme.Palette.textSecondary)
       HStack(spacing: 6) {
         ForEach(Array(Self.swatches.enumerated()), id: \.offset) { _, c in
           Button { controller.activeColor = c } label: {
@@ -406,22 +488,22 @@ struct AnnotateEditorRootView: View {
 
   private var textSection: some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text("النص").font(VantaTheme.Font.label).foregroundStyle(VantaTheme.Palette.textSecondary)
-      TextField("النص", text: $controller.customText).textFieldStyle(.roundedBorder)
-      Picker("الخط", selection: $controller.fontFamily) {
+      Text("Text").font(VantaTheme.Font.label).foregroundStyle(VantaTheme.Palette.textSecondary)
+      TextField("Text", text: $controller.customText).textFieldStyle(.roundedBorder)
+      Picker("Font", selection: $controller.fontFamily) {
         ForEach(Self.fontFamilies, id: \.self) { Text($0).tag($0) }
       }.labelsHidden()
-      sliderRow("حجم النص", value: $controller.fontSize, range: 12...120)
+      sliderRow("Text size", value: $controller.fontSize, range: 12...120)
     }
   }
 
   private var backgroundSection: some View {
     VStack(alignment: .leading, spacing: 10) {
       Toggle(isOn: background(\.enabled)) {
-        Text("الخلفية").font(VantaTheme.Font.title)
+        Text("Background").font(VantaTheme.Font.title)
       }.toggleStyle(.switch).controlSize(.small)
       if controller.document.background.enabled {
-        Text("قوالب").font(VantaTheme.Font.label).foregroundStyle(VantaTheme.Palette.textSecondary)
+        Text("Templates").font(VantaTheme.Font.label).foregroundStyle(VantaTheme.Palette.textSecondary)
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
           ForEach(BackgroundTemplate.all) { t in
             Button {
@@ -442,25 +524,25 @@ struct AnnotateEditorRootView: View {
           }
         }
         HStack(spacing: 6) {
-          VantaIconButton(title: "سطح المكتب", icon: "desktopcomputer", compact: true, action: controller.useWallpaper)
-          VantaIconButton(title: "ألوان الصورة", icon: "eyedropper", compact: true, action: controller.useImageColors)
+          VantaIconButton(title: "Desktop", icon: "desktopcomputer", compact: true, action: controller.useWallpaper)
+          VantaIconButton(title: "Image Colors", icon: "eyedropper", compact: true, action: controller.useImageColors)
         }
         VantaIconButton(
-          title: "إطار نافذة Mac", icon: "macwindow",
+          title: "Mac Window Frame", icon: "macwindow",
           isSelected: controller.document.background.frame == .macWindow, compact: true
         ) {
           var d = controller.document
           d.background.frame = d.background.frame == .macWindow ? .none : .macWindow
           controller.commit(d)
         }
-        .help("يضيف شريط عنوان بأزرار الإغلاق الثلاثة فوق اللقطة")
+        .help("Adds a title bar with the three window buttons above the capture")
         HStack {
-          ColorPicker("بداية", selection: backgroundColor(true))
-          ColorPicker("نهاية", selection: backgroundColor(false))
+          ColorPicker("Start", selection: backgroundColor(true))
+          ColorPicker("End", selection: backgroundColor(false))
         }.font(VantaTheme.Font.label)
-        sliderRow("الهامش", value: background(\.padding), range: 0...200)
-        sliderRow("الحواف", value: background(\.cornerRadius), range: 0...80)
-        sliderRow("الظل", value: background(\.shadowRadius), range: 0...80)
+        sliderRow("Padding", value: background(\.padding), range: 0...200)
+        sliderRow("Corners", value: background(\.cornerRadius), range: 0...80)
+        sliderRow("Shadow", value: background(\.shadowRadius), range: 0...80)
       }
     }
   }
@@ -473,11 +555,11 @@ struct AnnotateEditorRootView: View {
 
   private func hint(for tool: AnnotationTool) -> String {
     switch tool {
-    case .select: return "انقر عنصرًا لتحريكه أو تغيير حجمه من زواياه."
-    case .crop: return "اسحب فوق الصورة لاختيار منطقة القص."
-    case .pixelate, .redact: return "اسحب فوق المنطقة التي تريد إخفاءها."
-    case .spotlight: return "اسحب لتحديد المنطقة التي تبقى مضيئة."
-    case .image: return "اختر صورة لإدراجها ثم حرّكها بأداة التحريك."
+    case .select: return "Click an item to move it, or resize it from its corners."
+    case .crop: return "Drag on the image to choose the crop."
+    case .pixelate, .redact: return "Drag over the area you want to hide."
+    case .spotlight: return "Drag to choose the area that stays lit."
+    case .image: return "Choose an image to insert, then move it with the Move tool."
     default: return ""
     }
   }
@@ -487,7 +569,7 @@ struct AnnotateEditorRootView: View {
       HStack {
         Text(title).font(VantaTheme.Font.label).foregroundStyle(VantaTheme.Palette.textSecondary)
         Spacer()
-        Text("\u{2066}\(Int(value.wrappedValue))\u{2069}").font(VantaTheme.Font.number)
+        Text("\(Int(value.wrappedValue))").font(VantaTheme.Font.number)
       }
       Slider(value: value, in: range).controlSize(.small)
     }
@@ -530,10 +612,24 @@ struct ToolButton: View {
         .foregroundStyle(isSelected ? VantaTheme.Palette.accentText : VantaTheme.Palette.text)
         .background(
           RoundedRectangle(cornerRadius: VantaTheme.Radius.small, style: .continuous)
-            .fill(isSelected ? VantaTheme.Palette.accent : hovering ? VantaTheme.Palette.fillHover : VantaTheme.Palette.fillSubtle))
+            .fill(
+              isSelected
+                ? AnyShapeStyle(VantaTheme.Palette.accentGradient)
+                : AnyShapeStyle(
+                  hovering
+                    ? VantaTheme.Palette.surfaceHoverGradient
+                    : VantaTheme.Palette.surfaceGradient))
+        )
         .overlay(
           RoundedRectangle(cornerRadius: VantaTheme.Radius.small, style: .continuous)
-            .strokeBorder(isSelected ? .clear : VantaTheme.Palette.stroke, lineWidth: 1))
+            .strokeBorder(
+              isSelected
+                ? AnyShapeStyle(Color.white.opacity(0.45))
+                : AnyShapeStyle(VantaTheme.Palette.surfaceRim),
+              lineWidth: 1)
+        )
+        .shadow(
+          color: isSelected ? VantaTheme.Palette.accent.opacity(0.28) : .clear, radius: 8, y: 2)
     }
     .buttonStyle(.plain)
     .onHover { hovering = $0 }

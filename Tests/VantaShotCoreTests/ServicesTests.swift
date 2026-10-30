@@ -167,3 +167,35 @@ extension HistoryStoreContractTests {
     XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
   }
 }
+extension HistoryStoreContractTests {
+  func testBulkTrashThenEmptyTrashRemovesOnlyTrashedFiles() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let s = HistoryStore(rootURL: root.appendingPathComponent("store"))
+    var assets: [MediaAsset] = []
+    for name in ["A", "B", "C"] {
+      let file = root.appendingPathComponent("\(name).png")
+      try Data([1]).write(to: file)
+      let a = MediaAsset(
+        kind: .stillImage, title: name, fileURL: file, pixelSize: PixelSize(width: 10, height: 10))
+      try await s.insert(a)
+      assets.append(a)
+    }
+    let stored = try await s.load().entries
+    let kept = try XCTUnwrap(stored.first { $0.title == "B" })
+    let trashed = stored.filter { $0.title != "B" }
+
+    try await s.moveToTrash(trashed.map(\.id))
+    let afterTrash = try await s.load()
+    XCTAssertEqual(Set(afterTrash.deletedItemIDs ?? []), Set(trashed.map(\.id)))
+
+    let removed = try await s.emptyTrash()
+    XCTAssertEqual(removed, 2)
+    let m = try await s.load()
+    XCTAssertEqual(m.entries.map(\.id), [kept.id])
+    XCTAssertEqual(m.deletedItemIDs ?? [], [])
+    for a in trashed { XCTAssertFalse(FileManager.default.fileExists(atPath: a.fileURL.path)) }
+    XCTAssertTrue(FileManager.default.fileExists(atPath: kept.fileURL.path))
+  }
+}

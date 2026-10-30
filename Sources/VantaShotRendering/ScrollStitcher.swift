@@ -6,8 +6,8 @@ public enum StitchError: LocalizedError {
   case unmatched, limitReached
   public var errorDescription: String? {
     self == .unmatched
-      ? "تعذر إيجاد تداخل موثوق. حرّك مسافة أصغر؛ لم تُضف نسخة مكررة."
-      : "بلغت الصورة الحد الأقصى الآمن؛ أنهِ اللقطة الحالية."
+      ? "Could not find a reliable overlap. Move a shorter distance; no duplicate was added."
+      : "The image reached the safe size limit. Finish the current capture."
   }
 }
 public struct ScrollStitcher {

@@ -13,7 +13,7 @@ enum AudioMixService {
       guard
         let dest = composition.addMutableTrack(
           withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
-      else { throw RecordingError.encoding("تعذر تركيب الفيديو") }
+      else { throw RecordingError.encoding("Could not composite the video.") }
       try dest.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: track, at: .zero)
       dest.preferredTransform = try await track.load(.preferredTransform)
     }
@@ -22,7 +22,7 @@ enum AudioMixService {
       guard
         let dest = composition.addMutableTrack(
           withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-      else { throw RecordingError.encoding("تعذر مزج الصوت") }
+      else { throw RecordingError.encoding("Could not mix the audio.") }
       let range = CMTimeRangeGetIntersection(
         CMTimeRange(start: .zero, duration: duration), otherRange: try await track.load(.timeRange))
       if range.duration > CMTime.zero {
@@ -37,7 +37,7 @@ enum AudioMixService {
     guard
       let export = AVAssetExportSession(
         asset: composition, presetName: AVAssetExportPresetHighestQuality)
-    else { throw RecordingError.encoding("تعذر إنشاء مخرج الصوت") }
+    else { throw RecordingError.encoding("Could not create the audio output.") }
     let output = sourceURL.deletingLastPathComponent().appendingPathComponent(
       "VantaShot-\(UUID()).mp4")
     export.outputURL = output
@@ -51,7 +51,7 @@ enum AudioMixService {
       }, onCancel: { export.cancelExport() })
     try Task.checkCancellation()
     guard export.status == .completed else {
-      throw export.error ?? RecordingError.encoding("تعذر إنهاء مزج الصوت")
+      throw export.error ?? RecordingError.encoding("Could not finish mixing the audio.")
     }
     success = true
     return output

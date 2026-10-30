@@ -9,9 +9,11 @@ import VantaShotCore
   func show(_ asset: MediaAsset) {
     let w = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 720, height: 540),
-      styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+      styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered,
+      defer: false)
     w.isReleasedWhenClosed = false
-    w.title = "معاينة وقص التسجيل"
+    w.title = "Preview and Trim Recording"
+    VantaWindowGlass.configure(w)
     w.contentView = NSHostingView(rootView: MediaTrimView(asset: asset))
     w.center()
     w.makeKeyAndOrderFront(nil)
@@ -37,10 +39,10 @@ import VantaShotCore
     let image = try generator.copyCGImage(at: .zero, actualTime: nil)
     let preview = try AssetFiles.makeImage(
       NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height)),
-      title: "معاينة القص"
+      title: "Trim preview"
     ).fileURL
     return MediaAsset(
-      kind: .video, title: "تسجيل مقصوص", fileURL: out, previewURL: preview,
+      kind: .video, title: "Trimmed recording", fileURL: out, previewURL: preview,
       pixelSize: asset.pixelSize, duration: end - start)
   }
 }
@@ -53,13 +55,49 @@ struct MediaTrimView: View {
   @State private var error: String?
   var body: some View {
     VStack(spacing: 14) {
-      VideoPlayer(player: player).frame(minHeight: 300)
       HStack {
-        Text("من (ث)")
-        TextField("البداية", value: $start, format: .number).frame(width: 70)
-        Text("إلى (ث)")
-        TextField("النهاية", value: $end, format: .number).frame(width: 70)
-        Button("حفظ نسخة مقصوصة") {
+        Label(asset.title, systemImage: "scissors")
+          .font(VantaTheme.Font.title)
+          .lineLimit(1)
+        Spacer()
+        if let duration = asset.duration {
+          Text("\(String(format: "%.1f", duration)) s")
+            .font(VantaTheme.Font.number)
+            .foregroundStyle(VantaTheme.Palette.textSecondary)
+        }
+      }
+      VideoPlayer(player: player)
+        .frame(minHeight: 300)
+        .clipShape(RoundedRectangle(cornerRadius: VantaTheme.Radius.medium, style: .continuous))
+        .overlay(
+          RoundedRectangle(cornerRadius: VantaTheme.Radius.medium, style: .continuous)
+            .strokeBorder(VantaTheme.Palette.surfaceRim, lineWidth: 1)
+        )
+      HStack(spacing: 12) {
+        HStack(spacing: 6) {
+          Text("From (s)").font(VantaTheme.Font.label)
+            .foregroundStyle(VantaTheme.Palette.textSecondary)
+          TextField("Start", value: $start, format: .number)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 76)
+        }
+        HStack(spacing: 6) {
+          Text("To (s)").font(VantaTheme.Font.label)
+            .foregroundStyle(VantaTheme.Palette.textSecondary)
+          TextField("End", value: $end, format: .number)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 76)
+        }
+        Spacer()
+        if busy {
+          ProgressView().controlSize(.small)
+        }
+        VantaIconButton(
+          title: "Save Trimmed Copy",
+          icon: "scissors",
+          role: .prominent,
+          compact: true
+        ) {
           busy = true
           Task {
             do {
@@ -71,11 +109,23 @@ struct MediaTrimView: View {
           }
         }.disabled(busy)
       }
-      if busy { ProgressView("جارٍ التصدير…") }
-      if let error { Text(error).foregroundStyle(.red) }
-    }.frame(minWidth: 600, minHeight: 420).padding(16).onAppear {
+      .padding(12)
+      .vantaSurfaceCard(radius: VantaTheme.Radius.medium)
+      if let error {
+        Text(error).font(VantaTheme.Font.caption).foregroundStyle(VantaTheme.Palette.danger)
+      }
+    }
+    .frame(minWidth: 600, minHeight: 420)
+    .padding(18)
+    .padding(.top, 16)
+    .vantaWindowBackground()
+    .foregroundStyle(VantaTheme.Palette.text)
+    .preferredColorScheme(.dark)
+    .onAppear {
       player = AVPlayer(url: asset.fileURL)
       end = asset.duration ?? 1
-    }.onDisappear { player?.pause() }.environment(\.layoutDirection, .rightToLeft)
+    }
+    .onDisappear { player?.pause() }
+    .environment(\.layoutDirection, .leftToRight)
   }
 }

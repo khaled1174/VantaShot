@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import VantaShotCore
 
@@ -19,10 +20,9 @@ import VantaShotCore
         contentRect: NSRect(x: 0, y: 0, width: 560, height: 500),
         styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
       w.isReleasedWhenClosed = false
-      w.titlebarAppearsTransparent = true
       w.titleVisibility = .hidden
       w.isMovableByWindowBackground = true
-      w.backgroundColor = NSColor(red: 0.06, green: 0.075, blue: 0.12, alpha: 1)
+      VantaWindowGlass.configure(w)
       w.contentView = NSHostingView(
         rootView: WelcomeView { [weak self] in
           AppSettings.shared.hasSeenWelcome = true
@@ -50,8 +50,8 @@ struct WelcomeView: View {
         Image(systemName: "camera.viewfinder").font(.system(size: 26, weight: .semibold))
           .foregroundStyle(VantaTheme.Palette.accent)
         VStack(alignment: .leading, spacing: 2) {
-          Text("مرحبًا بك في VantaShot").font(.system(size: 20, weight: .bold))
-          Text("ثلاث خطوات قصيرة ثم تبدأ الالتقاط").font(VantaTheme.Font.body)
+          Text("Welcome to VantaShot").font(.system(size: 20, weight: .bold))
+          Text("Three short steps, then you can start capturing.").font(VantaTheme.Font.body)
             .foregroundStyle(VantaTheme.Palette.textSecondary)
         }
         Spacer()
@@ -66,20 +66,20 @@ struct WelcomeView: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       .padding(18)
-      .vantaGlassCard(radius: VantaTheme.Radius.large, shadow: false)
+      .vantaSurfaceCard(radius: VantaTheme.Radius.large, shadow: true)
       .id(step)
       .transition(.opacity.combined(with: .move(edge: .leading)))
       HStack {
-        Button("تخطّي") { onFinish() }.buttonStyle(.plain)
+        Button("Skip") { onFinish() }.buttonStyle(.plain)
           .foregroundStyle(VantaTheme.Palette.textSecondary)
         Spacer()
         if step > 0 {
-          VantaIconButton(title: "السابق", icon: "chevron.backward", compact: true) {
+          VantaIconButton(title: "Back", icon: "chevron.backward", compact: true) {
             withAnimation(VantaTheme.Motion.spring) { step -= 1 }
           }
         }
         VantaIconButton(
-          title: step == 2 ? "ابدأ الاستخدام" : "التالي",
+          title: step == 2 ? "Get Started" : "Next",
           icon: step == 2 ? "checkmark" : "chevron.forward", role: .prominent, compact: true
         ) {
           if step == 2 { onFinish() } else { withAnimation(VantaTheme.Motion.spring) { step += 1 } }
@@ -90,10 +90,12 @@ struct WelcomeView: View {
     .padding(.top, 10)
     .foregroundStyle(VantaTheme.Palette.text)
     .frame(width: 560, height: 500)
-    .background(Color(red: 0.06, green: 0.075, blue: 0.12))
+    .vantaWindowBackground()
     .preferredColorScheme(.dark)
-    .environment(\.layoutDirection, .rightToLeft)
-    .onReceive(timer) { _ in hasPermission = ScreenCaptureService.hasScreenPermission }
+    .environment(\.layoutDirection, .leftToRight)
+    .onReceive(timer) { _ in refreshPermission() }
+    .onReceive(NotificationCenter.default.publisher(for: ScreenCaptureService.didChangeNotification))
+    { _ in refreshPermission() }
   }
 
   private var stepIndicator: some View {
@@ -109,26 +111,35 @@ struct WelcomeView: View {
 
   private var permissionStep: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Label("إذن تسجيل الشاشة", systemImage: "lock.shield").font(VantaTheme.Font.title)
-      Text("يحتاج VantaShot إذن «تسجيل الشاشة» ليلتقط ويسجّل. يُطلب الإذن مرة واحدة من إعدادات النظام.")
+      Label("Screen Recording Permission", systemImage: "lock.shield").font(VantaTheme.Font.title)
+      Text("VantaShot needs Screen Recording permission to capture and record. macOS asks for it once.")
         .font(VantaTheme.Font.body).foregroundStyle(VantaTheme.Palette.textSecondary)
       HStack(spacing: 8) {
         Circle().fill(hasPermission ? VantaTheme.Palette.success : VantaTheme.Palette.warning)
           .frame(width: 8, height: 8)
-        Text(hasPermission ? "الإذن مفعّل" : "الإذن غير مفعّل بعد").font(VantaTheme.Font.label)
+        Text(hasPermission ? "Permission is on" : "Permission is still off")
+          .font(VantaTheme.Font.label)
       }
       if !hasPermission {
-        VantaIconButton(title: "فتح إعدادات النظام", icon: "gear", role: .prominent, compact: true) {
+        VantaIconButton(
+          title: "Open System Settings",
+          icon: "gear",
+          role: .prominent, compact: true
+        ) {
           ScreenCaptureService.requestPermissionAndOpenSettings()
         }
       }
     }
   }
 
+  private func refreshPermission() {
+    hasPermission = ScreenCaptureService.hasScreenPermission
+  }
+
   private var shortcutsStep: some View {
     VStack(alignment: .leading, spacing: 10) {
-      Label("الاختصارات العامة", systemImage: "keyboard").font(VantaTheme.Font.title)
-      Text("تعمل من أي تطبيق. يمكنك تغييرها لاحقًا من الإعدادات.")
+      Label("Global Shortcuts", systemImage: "keyboard").font(VantaTheme.Font.title)
+      Text("They work from any app. You can change them later in Settings.")
         .font(VantaTheme.Font.body).foregroundStyle(VantaTheme.Palette.textSecondary)
       ForEach([AppCommand.allInOne, .area, .window, .fullscreen, .recordToggle, .ocr]) { c in
         HStack {
@@ -139,28 +150,28 @@ struct WelcomeView: View {
             .background(Capsule().fill(VantaTheme.Palette.fillSubtle))
         }
       }
-      Button("تعديل الاختصارات…") { SettingsWindowController.shared.show() }
+      Button("Edit Shortcuts…") { SettingsWindowController.shared.show() }
         .buttonStyle(.plain).font(VantaTheme.Font.label).foregroundStyle(VantaTheme.Palette.accent)
     }
   }
 
   private var folderStep: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Label("مجلد الحفظ", systemImage: "folder").font(VantaTheme.Font.title)
-      Text("تُحفظ اللقطات والتسجيلات هنا عند الضغط على «حفظ».")
+      Label("Save Folder", systemImage: "folder").font(VantaTheme.Font.title)
+      Text("Captures and recordings are saved here when you click Save.")
         .font(VantaTheme.Font.body).foregroundStyle(VantaTheme.Palette.textSecondary)
       Text(settings.outputPath).font(VantaTheme.Font.number).lineLimit(2)
         .padding(10).frame(maxWidth: .infinity, alignment: .leading)
         .background(
           RoundedRectangle(cornerRadius: VantaTheme.Radius.small, style: .continuous)
             .fill(VantaTheme.Palette.fillSubtle))
-      VantaIconButton(title: "اختيار مجلد آخر", icon: "folder.badge.plus", compact: true) {
+      VantaIconButton(title: "Choose Another Folder", icon: "folder.badge.plus", compact: true) {
         let p = NSOpenPanel()
         p.canChooseDirectories = true
         p.canChooseFiles = false
         if p.runModal() == .OK, let u = p.url { settings.outputPath = u.path }
       }
-      Picker("صيغة الصور", selection: $settings.imageFormat) {
+      Picker("Image format", selection: $settings.imageFormat) {
         Text("PNG").tag("png")
         Text("JPEG").tag("jpg")
       }.pickerStyle(.segmented).frame(width: 200)

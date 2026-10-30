@@ -63,7 +63,7 @@ struct CountdownBadgeView: View {
           .stroke(VantaTheme.Palette.accent.opacity(0.8), style: StrokeStyle(lineWidth: 4, lineCap: .round))
           .padding(6)
           .rotationEffect(.degrees(-90))
-        Text("\u{2066}\(model.number)\u{2069}")
+        Text("\(model.number)")
           .font(.system(size: 72, weight: .bold, design: .rounded))
           .foregroundStyle(VantaTheme.Palette.text)
           .scaleEffect(pop ? 1 : 0.6)
@@ -74,7 +74,7 @@ struct CountdownBadgeView: View {
       .background(VantaGlassMaterial(material: .hudWindow, cornerRadius: 66))
       .clipShape(Circle())
       .shadow(color: .black.opacity(VantaTheme.Shadow.opacity), radius: 18, y: 8)
-      Text("Esc للإلغاء")
+      Text("Esc to cancel")
         .font(VantaTheme.Font.caption)
         .foregroundStyle(VantaTheme.Palette.text)
         .padding(.horizontal, 10).padding(.vertical, 4)
@@ -86,6 +86,7 @@ struct CountdownBadgeView: View {
       pop = false
       withAnimation(VantaTheme.Motion.spring) { pop = true }
     }
+    .environment(\.layoutDirection, .leftToRight)
   }
 }
 

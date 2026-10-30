@@ -5,10 +5,21 @@ import VantaShotCore
 @MainActor public final class VantaAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   private var keyMonitor: Any?
   public func applicationDidFinishLaunching(_ notification: Notification) {
+    if CommandLine.arguments.contains("--print-screen-permission") {
+      let granted = CGPreflightScreenCaptureAccess()
+      let line = granted ? "granted\n" : "denied\n"
+      try? line.write(
+        toFile: "/tmp/vantashot-screen-permission.txt", atomically: true, encoding: .utf8)
+      NSApp.terminate(nil)
+      return
+    }
+    AppSettings.shared.applyActivationPolicy()
     GlobalShortcutManager.shared.start()
     AssetFiles.cleanupTemporary()
     MenuBarLauncherController.shared.install()
-    NSApp.activate(ignoringOtherApps: true)
+    if !AppSettings.shared.hideDockIcon {
+      NSApp.activate(ignoringOtherApps: true)
+    }
     WelcomeWindowController.shared.showIfNeeded()
     // Automation hook used by the UI verification scripts: `VantaShot --open-launcher`.
     if CommandLine.arguments.contains("--open-launcher") {
@@ -31,10 +42,24 @@ import VantaShotCore
     return true
   }
   public func applicationDidBecomeActive(_ notification: Notification) {
+    ScreenCaptureService.refreshAfterForeground()
     if !CleanWorkflowCoordinator.shared.isBusy,
-      NSApp.windows.allSatisfy({ !$0.isVisible || $0 is NSPanel })
+      !AppSettings.shared.hideDockIcon,
+      NSApp.windows.allSatisfy({ !$0.isVisible })
     {
       CleanWorkflowCoordinator.shared.showLauncherWindow()
+    }
+  }
+  public func application(_ sender: NSApplication, open urls: [URL]) {
+    Self.openFiles(urls)
+  }
+  public static func openFiles(_ urls: [URL]) {
+    for url in urls {
+      if url.pathExtension.lowercased() == "vantashot" {
+        AnnotateWindowController.shared.openProject(url)
+      } else if let image = NSImage(contentsOf: url) {
+        AnnotateWindowController.shared.open(with: image, title: url.lastPathComponent)
+      }
     }
   }
   public func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -63,12 +88,15 @@ import VantaShotCore
           w.delegate = delegate
           w.isReleasedWhenClosed = false
           w.isRestorable = false
-          w.titlebarAppearsTransparent = true
+          VantaWindowGlass.configure(w)
+          if AppSettings.shared.hideDockIcon {
+            w.orderOut(nil)
+          }
         }
       ).preferredColorScheme(.dark)
     }.windowResizability(.contentSize).commands {
       CommandGroup(replacing: .appSettings) {
-        Button("الإعدادات…") { SettingsWindowController.shared.show() }.keyboardShortcut(
+        Button("Settings…") { SettingsWindowController.shared.show() }.keyboardShortcut(
           ",", modifiers: .command)
       }
     }

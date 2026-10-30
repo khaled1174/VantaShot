@@ -3,15 +3,16 @@ import CoreMedia
 import ScreenCaptureKit
 import VantaShotCore
 
-enum CaptureError: LocalizedError {
+enum CaptureError: LocalizedError, Equatable {
   case permissionDenied, noDisplay, noWindow, emptyCapture, timeout
   var errorDescription: String? {
     switch self {
-    case .permissionDenied: return "يلزم تفعيل إذن تسجيل الشاشة من إعدادات الخصوصية"
-    case .noDisplay: return "الشاشة المحددة غير متاحة"
-    case .noWindow: return "النافذة المحددة لم تعد متاحة"
-    case .emptyCapture: return "لم يُرجع النظام صورة صالحة"
-    case .timeout: return "انتهت مهلة التقاط الشاشة؛ أعد المحاولة"
+    case .permissionDenied:
+      return "Screen Recording blocked this capture. Turn VantaShot on under Screen & System Audio Recording. If it is already on, quit VantaShot and open it once."
+    case .noDisplay: return "The selected display is not available."
+    case .noWindow: return "The selected window is no longer available."
+    case .emptyCapture: return "The system did not return a valid image."
+    case .timeout: return "Screen capture timed out. Try again."
     }
   }
 }
@@ -97,19 +98,48 @@ enum CaptureError: LocalizedError {
     }
     return (SCContentFilter(display: display, excludingWindows: own), config)
   }
+  /// `CGPreflightScreenCaptureAccess` stays false after the user turns the switch on.
+  /// Ask ScreenCaptureKit itself, and only then treat a denial as missing permission.
+  static func shareableContent() async throws -> SCShareableContent {
+    do {
+      let content = try await SCShareableContent.excludingDesktopWindows(
+        false, onScreenWindowsOnly: true)
+      ScreenCaptureService.noteScreenCaptureAvailable()
+      return content
+    } catch {
+      throw mapCaptureError(error)
+    }
+  }
+
+  static func mapCaptureError(_ error: Error) -> Error {
+    let ns = error as NSError
+    let userDeclined = ScreenCaptureDenial.isUserDeclined(domain: ns.domain, code: ns.code)
+    let looksDenied =
+      !ScreenCaptureService.hasScreenPermission
+      && ScreenCaptureDenial.looksLikePermissionFailure(
+        domain: ns.domain, code: ns.code, description: ns.localizedDescription)
+    if userDeclined || looksDenied {
+      ScreenCaptureService.noteScreenAccessDeniedBySystem()
+      return CaptureError.permissionDenied
+    }
+    return error
+  }
+
   static func capture(
     rect: CGRect, windowID: CGWindowID? = nil, expectedTarget: DisplayCaptureTarget? = nil
   ) async throws -> NSImage {
-    guard CGPreflightScreenCaptureAccess() else { throw CaptureError.permissionDenied }
     try Task.checkCancellation()
-    let content = try await SCShareableContent.excludingDesktopWindows(
-      false, onScreenWindowsOnly: true)
+    let content = try await shareableContent()
     let (filter, config) = try configuration(
       rect: rect, content: content, windowID: windowID, expectedTarget: expectedTarget)
     let image: CGImage
     if #available(macOS 14.0, *) {
-      image = try await SCScreenshotManager.captureImage(
-        contentFilter: filter, configuration: config)
+      do {
+        image = try await SCScreenshotManager.captureImage(
+          contentFilter: filter, configuration: config)
+      } catch {
+        throw mapCaptureError(error)
+      }
     } else {
       let receiver = FirstFrameReceiver()
       let stream = SCStream(filter: filter, configuration: config, delegate: receiver)
@@ -121,7 +151,7 @@ enum CaptureError: LocalizedError {
         try? await stream.stopCapture()
       } catch {
         try? await stream.stopCapture()
-        throw error
+        throw mapCaptureError(error)
       }
     }
     try Task.checkCancellation()
