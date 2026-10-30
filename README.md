@@ -1,7 +1,11 @@
 # VantaShot
 
-Screenshots and screen recordings for macOS. Capture an area, a window, the full
-screen, or a scrolling page. Annotate it, copy it, or record video and GIFs.
+Screenshots and screen recordings for macOS, free.
+
+One bar for area, window, full screen, scrolling pages, text (OCR), video and GIF.
+Annotate, pin, or copy without leaving the capture. Nothing leaves your Mac.
+
+![VantaShot on macOS](docs/images/hero-desktop.png)
 
 ## Download
 
@@ -50,12 +54,28 @@ After you turn on Screen Recording, macOS may ask you to quit and reopen VantaSh
 - **History** of recent captures with search, filters, Select All, bulk delete, and Empty Trash.
 - **Pins:** keep a screenshot floating above other windows.
 
+## How it looks
+
+Pick the capture mode from one bar — no need to remember a shortcut first.
+
+![VantaShot capture bar](docs/images/capture-overlay.png)
+
+A magnifier and a live `W × H` readout, so the crop is exactly the crop you meant.
+
+![Precise selection](docs/images/precision-loupe.png)
+
+Recent captures, history, editor, and a desktop-icon toggle, one click from the menu bar.
+
+![VantaShot panel](docs/images/panel.png)
+
 ## Updates
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed in each version. New versions are
 published on the [Releases page](https://github.com/khaled1174/VantaShot/releases).
 
 ## License
+
+VantaShot is free to download and use, with no account and no subscription.
 
 Copyright © 2026 Khaled Almkhlfi. All rights reserved.
 
