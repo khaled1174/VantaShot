@@ -10,7 +10,7 @@ import VantaShotCore
 // MARK: - Capture Mode Definition
 
 public enum CaptureMode: String, CaseIterable, Identifiable {
-  case allInOne = "All in One"
+  case allInOne = "Smart Capture"
   case area = "Area"
   case window = "Window"
   case fullscreen = "Full Screen"

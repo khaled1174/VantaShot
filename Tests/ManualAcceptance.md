@@ -4,7 +4,7 @@ Record the exact build, OS, architecture, display scale and evidence file for ea
 
 The current execution record and 60-feature matrix live in `../../notes/vantashot-implementation-2026-10-27/`.
 
-- Capture: region, fullscreen, window, previous area, timer completion/cancellation, All-in-One area/window actions; window→area/fullscreen transitions must export the final target.
+- Capture: region, fullscreen, window, previous area, timer completion/cancellation, Smart Capture area/window actions; window→area/fullscreen transitions must export the final target.
 - Selection: move and resize without creating a replacement rectangle; distinguish points from output pixels on 1×/2× displays.
 - Lifecycle: reopen editor/history20 times; close launcher and reopen from Dock; cancel selection/countdown/scrolling/recording/startup/export and start another operation.
 - Documents: opaque redaction→later pixelation→crop→PNG/copy/drag, with Undo/Redo; portrait/landscape/Retina images preserve original pixels; rendering errors never return the unmodified source.

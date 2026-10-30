@@ -1,49 +1,85 @@
 # VantaShot
 
-Native macOS screenshot and screen recording application, built with Swift,
-AppKit, SwiftUI, and ScreenCaptureKit.
+Screenshots and screen recordings for macOS. Capture an area, a window, the full
+screen, or a scrolling page. Annotate it, copy it, or record video and GIFs.
 
-## Requirements
+## Download
 
-- macOS 13 or newer
-- Xcode with Swift 5.9 or newer and command line tools
+**[Download the latest version](https://github.com/khaled1174/VantaShot/releases/latest)**,
+then pick the `VantaShot-<version>-arm64.dmg` file under **Assets**.
 
-## Build
+The app is signed with Developer ID and notarized by Apple, so macOS opens it
+without a security warning.
 
-```bash
-swift build
-```
+**Requirements:** macOS 13 Ventura or newer, on a Mac with Apple silicon (M1 or later).
+Intel Macs are not supported yet.
 
-To create the development app bundle:
+## Install
 
-```bash
-bash bundle-app.sh
-```
+1. Open the downloaded `.dmg` file.
+2. Drag **VantaShot** into the **Applications** folder.
+3. Open VantaShot from Applications.
 
-The bundle is written to `dist/VantaShot.app`. The script uses an available
-Apple Development signing identity, or an ad-hoc signature when none is found.
-See [NOTARIZATION.md](NOTARIZATION.md) for Developer ID distribution.
+### Permissions
 
-## Tests
+macOS asks for these the first time you use each feature. You can also turn them
+on from VantaShot **Settings → Permissions and About**.
 
-```bash
-swift test
-```
+| Permission | Needed for |
+| --- | --- |
+| Screen Recording | All screenshots and screen recordings |
+| Microphone | Voiceover in video recordings (optional) |
+| Accessibility | Scrolling capture |
+| Input Monitoring | Showing keystrokes in recordings (optional) |
 
-Manual runtime checks are documented in [Tests/ManualAcceptance.md](Tests/ManualAcceptance.md)
-and [Tests/ManualShortcutsAcceptance.md](Tests/ManualShortcutsAcceptance.md).
+After you turn on Screen Recording, macOS may ask you to quit and reopen VantaShot.
 
-## Restore from GitHub
+## Features
+
+- **Smart Capture:** select an area, then choose area, window, full screen, scrolling,
+  text, or recording from one bar.
+- **Area, Window, and Full Screen** capture, plus a self-timer and "capture the
+  previous area again".
+- **Scrolling capture** for long pages.
+- **Copy text (OCR)** from anything on screen.
+- **Video and GIF recording** with optional microphone, system audio, cursor, and keystrokes.
+- **Editor** with arrows, shapes, text, highlighter, numbered steps, pixelate,
+  redact, spotlight, and crop.
+- **Capture cards:** every capture stays on screen until you close it, so you can
+  take several and use each one where you need it.
+- **History** of recent captures with search, filters, Select All, bulk delete, and Empty Trash.
+- **Pins:** keep a screenshot floating above other windows.
+
+## Updates
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version. New versions are
+published on the [Releases page](https://github.com/khaled1174/VantaShot/releases).
+
+## License
+
+Copyright © 2026 Khaled Almkhlfi. All rights reserved.
+
+You may download and use the official VantaShot releases. The source code is
+published for reference only. You may not copy, modify, or redistribute it without
+written permission. See [LICENSE](LICENSE).
+
+---
+
+## For developers: build from source
+
+Building from source needs Xcode with Swift 5.9 or newer and the command line tools.
 
 ```bash
 git clone https://github.com/khaled1174/VantaShot.git
 cd VantaShot
-bash bundle-app.sh
+swift build
+swift test
+bash bundle-app.sh   # writes dist/VantaShot.app
 ```
 
-This repository backs up the source, tests, app resources, build scripts, and
-project documentation. Generated build/distribution output, local Codex settings,
-and signing credentials are excluded. Signing identities and notarization
-credentials stay in the macOS Keychain and must be configured separately on a
-new Mac. External REA research notes and original third-party artifacts are not
-part of this application repository.
+`bundle-app.sh` signs with a Developer ID or Apple Development identity if one is in
+your Keychain, otherwise with an ad-hoc signature. Notarized releases are made with
+`script/notarize_release.sh`. See [NOTARIZATION.md](NOTARIZATION.md).
+
+Manual checks are in [Tests/ManualAcceptance.md](Tests/ManualAcceptance.md) and
+[Tests/ManualShortcutsAcceptance.md](Tests/ManualShortcutsAcceptance.md).

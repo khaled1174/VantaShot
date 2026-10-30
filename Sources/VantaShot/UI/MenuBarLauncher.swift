@@ -192,7 +192,7 @@ struct LauncherPanelView: View {
     } label: {
       HStack {
         Image(systemName: "sparkles.rectangle.stack").font(.system(size: 16, weight: .semibold))
-        Text("All in One").font(.system(size: 14, weight: .semibold))
+        Text("Smart Capture").font(.system(size: 14, weight: .semibold))
         Spacer()
         Text(shortcuts.label(.allInOne))
           .font(VantaTheme.Font.number)
@@ -227,7 +227,7 @@ struct LauncherPanelView: View {
     }
     .buttonStyle(.plain)
     .onHover { primaryHovering = $0 }
-    .help("All in One — choose a mode from the selection bar")
+    .help("Smart Capture — choose a mode from the selection bar")
   }
 
   private func tileRow(_ commands: [AppCommand]) -> some View {

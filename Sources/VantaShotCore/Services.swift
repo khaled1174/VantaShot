@@ -7,7 +7,7 @@ public enum AppCommand: String, CaseIterable, Codable, Identifiable, Sendable {
   public var id: String { rawValue }
   public var title: String {
     switch self {
-    case .allInOne: return "All in One"
+    case .allInOne: return "Smart Capture"
     case .area: return "Capture Area"
     case .previousArea: return "Previous Area"
     case .fullscreen: return "Full Screen"

@@ -599,13 +599,13 @@ final class NativeCaptureOverlayNSView: NSView {
   }
 }
 
-// MARK: - Bottom Floating All-In-One HUD Bar
+// MARK: - Bottom Floating Smart Capture HUD Bar
 
 extension CaptureMode {
   /// Short label that fits the HUD; the full `rawValue` stays for menus and commands.
   var hudTitle: String {
     switch self {
-    case .allInOne: return "All"
+    case .allInOne: return "Smart"
     case .area: return "Area"
     case .window: return "Window"
     case .fullscreen: return "Screen"
