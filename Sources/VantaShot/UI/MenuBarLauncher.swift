@@ -21,7 +21,7 @@ import VantaShotCore
     item.button?.target = self
     item.button?.action = #selector(statusItemClicked(_:))
     item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-    item.button?.toolTip = "VantaShot — انقر للإطلاق، انقر بالزر الأيمن للقائمة"
+    item.button?.toolTip = "VantaShot — click to open, right-click for the menu"
     statusItem = item
     LiveScreenRecorderController.shared.$isRecording
       .receive(on: RunLoop.main)
@@ -79,14 +79,14 @@ import VantaShotCore
   private func showContextMenu() {
     guard let item = statusItem else { return }
     let menu = NSMenu()
-    menu.addItem(withTitle: "فتح اللوحة", action: #selector(openPanel), keyEquivalent: "")
-    menu.addItem(withTitle: "الإعدادات…", action: #selector(openSettings), keyEquivalent: ",")
+    menu.addItem(withTitle: "Open Panel", action: #selector(openPanel), keyEquivalent: "")
+    menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
     menu.addItem(.separator())
     let cancel = menu.addItem(
-      withTitle: "إلغاء العملية الحالية", action: #selector(cancelCurrent), keyEquivalent: "")
+      withTitle: "Cancel Current Action", action: #selector(cancelCurrent), keyEquivalent: "")
     cancel.isEnabled = CleanWorkflowCoordinator.shared.isBusy
     menu.addItem(.separator())
-    menu.addItem(withTitle: "إنهاء VantaShot", action: #selector(quit), keyEquivalent: "q")
+    menu.addItem(withTitle: "Quit VantaShot", action: #selector(quit), keyEquivalent: "q")
     for i in menu.items { i.target = self }
     item.menu = menu
     item.button?.performClick(nil)
@@ -108,6 +108,8 @@ struct LauncherPanelView: View {
   @ObservedObject private var shortcuts = GlobalShortcutManager.shared
   @ObservedObject private var ocr = OCRResultsController.shared
   var inPopover: Bool
+  @State private var primaryHovering = false
+  @State private var screenGranted = ScreenCaptureService.hasScreenPermission
 
   private let tiles: [AppCommand] = [.area, .window, .fullscreen, .scrolling]
   private let secondTiles: [AppCommand] = [.ocr, .recordToggle, .selfTimer, .previousArea]
@@ -126,12 +128,30 @@ struct LauncherPanelView: View {
     }
     .padding(16)
     .foregroundStyle(VantaTheme.Palette.text)
-    .background(inPopover ? Color.clear : Color(red: 0.06, green: 0.075, blue: 0.12))
-    .environment(\.layoutDirection, .rightToLeft)
+    .background {
+      if inPopover {
+        RadialGradient(
+          colors: [VantaTheme.Palette.accent.opacity(0.10), Color.clear],
+          center: .topLeading,
+          startRadius: 8,
+          endRadius: 320
+        )
+      } else {
+        Color.clear.vantaWindowBackground()
+      }
+    }
+    .environment(\.layoutDirection, .leftToRight)
+    .onAppear { refreshScreenPermission() }
     .onReceive(
       NotificationCenter.default.publisher(
         for: NSTextInputContext.keyboardSelectionDidChangeNotification)
     ) { _ in shortcuts.objectWillChange.send() }
+    .onReceive(NotificationCenter.default.publisher(for: ScreenCaptureService.didChangeNotification))
+    { _ in refreshScreenPermission() }
+  }
+
+  private func refreshScreenPermission() {
+    screenGranted = ScreenCaptureService.hasScreenPermission
   }
 
   private var header: some View {
@@ -141,7 +161,7 @@ struct LauncherPanelView: View {
         .foregroundStyle(VantaTheme.Palette.accent)
       VStack(alignment: .leading, spacing: 1) {
         Text("VantaShot").font(VantaTheme.Font.title)
-        Text("التقط، عدّل، واحفظ").font(VantaTheme.Font.caption)
+        Text("Capture, edit, and save").font(VantaTheme.Font.caption)
           .foregroundStyle(VantaTheme.Palette.textSecondary)
       }
       Spacer()
@@ -151,14 +171,14 @@ struct LauncherPanelView: View {
         } label: {
           HStack(spacing: 4) {
             Image(systemName: "xmark.circle.fill")
-            Text("إلغاء").font(VantaTheme.Font.label)
+            Text("Cancel").font(VantaTheme.Font.label)
           }
           .foregroundStyle(VantaTheme.Palette.danger)
-        }.buttonStyle(.plain).help("إلغاء العملية الحالية (Esc)")
+        }.buttonStyle(.plain).help("Cancel the current action (Esc)")
       } else {
         HStack(spacing: 5) {
           Circle().fill(VantaTheme.Palette.success).frame(width: 7, height: 7)
-          Text("جاهز").font(VantaTheme.Font.caption)
+          Text("Ready").font(VantaTheme.Font.caption)
             .foregroundStyle(VantaTheme.Palette.textSecondary)
         }
       }
@@ -172,18 +192,42 @@ struct LauncherPanelView: View {
     } label: {
       HStack {
         Image(systemName: "sparkles.rectangle.stack").font(.system(size: 16, weight: .semibold))
-        Text("الكل في واحد").font(.system(size: 14, weight: .semibold))
+        Text("All in One").font(.system(size: 14, weight: .semibold))
         Spacer()
-        Text(shortcuts.label(.allInOne)).font(VantaTheme.Font.number).opacity(0.75)
+        Text(shortcuts.label(.allInOne))
+          .font(VantaTheme.Font.number)
+          .padding(.horizontal, 8)
+          .padding(.vertical, 3)
+          .background(Capsule().fill(Color.black.opacity(0.18)))
       }
       .foregroundStyle(VantaTheme.Palette.accentText)
       .padding(.horizontal, 14).padding(.vertical, 11)
       .background(
         RoundedRectangle(cornerRadius: VantaTheme.Radius.medium, style: .continuous)
-          .fill(VantaTheme.Palette.accent))
+          .fill(VantaTheme.Palette.accentGradient)
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: VantaTheme.Radius.medium, style: .continuous)
+          .strokeBorder(
+            LinearGradient(
+              colors: [Color.white.opacity(0.60), VantaTheme.Palette.accent.opacity(0.85)],
+              startPoint: .topLeading,
+              endPoint: .bottomTrailing
+            ),
+            lineWidth: 1
+          )
+      )
+      .shadow(
+        color: VantaTheme.Palette.accent.opacity(primaryHovering ? 0.42 : 0.24),
+        radius: primaryHovering ? 16 : 10,
+        y: 4
+      )
+      .scaleEffect(primaryHovering ? 1.015 : 1)
+      .animation(VantaTheme.Motion.fade, value: primaryHovering)
     }
     .buttonStyle(.plain)
-    .help("الكل في واحد — اختر الوضع من شريط التحديد")
+    .onHover { primaryHovering = $0 }
+    .help("All in One — choose a mode from the selection bar")
   }
 
   private func tileRow(_ commands: [AppCommand]) -> some View {
@@ -205,11 +249,11 @@ struct LauncherPanelView: View {
   private var recentStrip: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
-        Text("آخر اللقطات").font(VantaTheme.Font.label)
+        Text("Recent Captures").font(VantaTheme.Font.label)
           .foregroundStyle(VantaTheme.Palette.textSecondary)
         Spacer()
         if !coordinator.history.isEmpty {
-          Button("السجل كاملًا") {
+          Button("All History") {
             MenuBarLauncherController.shared.close()
             CommandRouter.shared.perform(.history)
           }
@@ -218,12 +262,10 @@ struct LauncherPanelView: View {
         }
       }
       if coordinator.history.isEmpty {
-        Text("لا توجد لقطات بعد — ابدأ بالتقاط منطقة")
+        Text("No captures yet — start with an area capture")
           .font(VantaTheme.Font.caption).foregroundStyle(VantaTheme.Palette.textSecondary)
           .frame(maxWidth: .infinity, minHeight: 64)
-          .background(
-            RoundedRectangle(cornerRadius: VantaTheme.Radius.small, style: .continuous)
-              .fill(VantaTheme.Palette.fillSubtle))
+          .vantaSurfaceCard(radius: VantaTheme.Radius.small)
       } else {
         HStack(spacing: 8) {
           ForEach(coordinator.history.prefix(4)) { a in
@@ -250,7 +292,7 @@ struct LauncherPanelView: View {
               .foregroundStyle(VantaTheme.Palette.accent)
             Text(c.title).font(VantaTheme.Font.body)
             Spacer()
-            Text(c == .history ? "\u{2066}\(coordinator.history.count)\u{2069}" : shortcuts.label(c))
+            Text(c == .history ? "\(coordinator.history.count)" : shortcuts.label(c))
               .font(VantaTheme.Font.number).foregroundStyle(VantaTheme.Palette.textSecondary)
           }
           .padding(.horizontal, 10).padding(.vertical, 6)
@@ -268,18 +310,15 @@ struct LauncherPanelView: View {
       } label: {
         HStack(spacing: 5) {
           Circle()
-            .fill(
-              ScreenCaptureService.hasScreenPermission
-                ? VantaTheme.Palette.success : VantaTheme.Palette.warning
-            )
+            .fill(screenGranted ? VantaTheme.Palette.success : VantaTheme.Palette.warning)
             .frame(width: 7, height: 7)
-          Text(ScreenCaptureService.hasScreenPermission ? "إذن الشاشة مفعّل" : "تفعيل إذن الشاشة")
+          Text(screenGranted ? "Screen permission is on" : "Turn On Screen Permission")
             .font(VantaTheme.Font.caption)
         }
         .foregroundStyle(VantaTheme.Palette.textSecondary)
-      }.buttonStyle(.plain)
+      }.buttonStyle(.plain).disabled(screenGranted)
       if ocr.result != nil {
-        Button("نتيجة OCR") {
+        Button("OCR Result") {
           MenuBarLauncherController.shared.close()
           ocr.show()
         }
@@ -292,13 +331,13 @@ struct LauncherPanelView: View {
         SettingsWindowController.shared.show()
       } label: {
         Image(systemName: "gearshape").font(.system(size: 13, weight: .semibold))
-      }.buttonStyle(.plain).help("الإعدادات والاختصارات ⌘,")
+      }.buttonStyle(.plain).help("Settings and shortcuts ⌘,")
       if inPopover {
         Button {
           NSApp.terminate(nil)
         } label: {
           Image(systemName: "power").font(.system(size: 13, weight: .semibold))
-        }.buttonStyle(.plain).help("إنهاء VantaShot")
+        }.buttonStyle(.plain).help("Quit VantaShot")
       }
     }
     .foregroundStyle(VantaTheme.Palette.textSecondary)
@@ -306,14 +345,14 @@ struct LauncherPanelView: View {
 
   private func shortTitle(_ c: AppCommand) -> String {
     switch c {
-    case .area: return "منطقة"
-    case .window: return "نافذة"
-    case .fullscreen: return "الشاشة"
-    case .scrolling: return "تمرير"
-    case .ocr: return "نص"
-    case .recordToggle: return LiveScreenRecorderController.shared.isRecording ? "إيقاف" : "تسجيل"
-    case .selfTimer: return "مؤقت"
-    case .previousArea: return "السابقة"
+    case .area: return "Area"
+    case .window: return "Window"
+    case .fullscreen: return "Screen"
+    case .scrolling: return "Scroll"
+    case .ocr: return "Text"
+    case .recordToggle: return LiveScreenRecorderController.shared.isRecording ? "Stop" : "Record"
+    case .selfTimer: return "Timer"
+    case .previousArea: return "Previous"
     default: return c.title
     }
   }
@@ -342,13 +381,11 @@ struct LauncherRowStyle: ButtonStyle {
   @State private var hovering = false
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .background(
-        RoundedRectangle(cornerRadius: VantaTheme.Radius.small, style: .continuous)
-          .fill(
-            configuration.isPressed
-              ? VantaTheme.Palette.fillHover
-              : hovering ? VantaTheme.Palette.fillHover : VantaTheme.Palette.fillSubtle)
+      .vantaSurfaceCard(
+        radius: VantaTheme.Radius.small,
+        isHovering: hovering || configuration.isPressed
       )
+      .scaleEffect(configuration.isPressed ? 0.985 : 1)
       .onHover { hovering = $0 }
       .animation(VantaTheme.Motion.fade, value: hovering)
   }

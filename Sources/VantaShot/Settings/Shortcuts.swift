@@ -51,7 +51,7 @@ final class GlobalShortcutManager: ObservableObject {
       }, events.count, &events, Unmanaged.passUnretained(self).toOpaque(), &handler)
     logger.info("Carbon handler status: \(installStatus)")
     if installStatus != noErr {
-      errors[.showLauncher] = "تعذر تشغيل محرك الاختصارات (\(installStatus))"
+      errors[.showLauncher] = "Could not start the shortcut engine (\(installStatus))"
       return
     }
     apply(configuration.bindings)
@@ -98,11 +98,11 @@ final class GlobalShortcutManager: ObservableObject {
       }
       if let conflict = conflicts[command] {
         problems[command] =
-          conflict == .duplicate ? "التركيبة مستخدمة لأمر آخر" : "اختصار غير صالح أو محجوز للنظام"
+          conflict == .duplicate ? "This combination is already used by another command." : "The shortcut is invalid or reserved by the system."
         continue
       }
       if system.contains("\(b.keyCode):\(carbon(b.modifiers))") {
-        problems[command] = "التركيبة مستخدمة في إعدادات النظام"
+        problems[command] = "This combination is used in System Settings."
         continue
       }
       if registered[command] == b { continue }
@@ -111,7 +111,7 @@ final class GlobalShortcutManager: ObservableObject {
       registered[command] = nil
       let result = register(b)
       if result != noErr {
-        problems[command] = "تعذر تسجيل الاختصار (\(result)). بقي الاختصار السابق."
+        problems[command] = "Could not register the shortcut (\(result)). The previous shortcut is still active."
         if let old { _ = register(old) }
       }
     }
@@ -257,49 +257,87 @@ struct ShortcutsSettingsView: View {
   @State private var recording: AppCommand?
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("الاختصارات العامة").font(.title2.bold())
-      Text("تعمل من أي تطبيق. اختر تسجيلًا واضغط التركيبة. Esc يلغي الإدخال.").font(.caption)
+      Text("Global Shortcuts").font(.title2.bold())
+      Text("They work from any app. Click a shortcut, then press the new combination. Esc cancels.").font(.caption)
         .foregroundStyle(.secondary)
       ScrollView {
-        ForEach(AppCommand.allCases) { c in
-          HStack {
-            Toggle(
-              c.title,
-              isOn: Binding(
-                get: {
-                  manager.configuration.bindings.first { $0.command == c }?.isEnabled ?? false
-                },
-                set: { v in
-                  var b =
-                    manager.configuration.bindings.first { $0.command == c }
-                    ?? ShortcutBinding(command: c, keyCode: 0, isEnabled: false)
-                  b.isEnabled = v
-                  manager.update(b)
-                })
-            ).frame(width: 210, alignment: .leading)
-            Button(manager.label(c)) {
-              manager.suspend()
-              recording = c
-            }.frame(width: 150)
-            Button("مسح") { manager.clear(c) }
-          }.padding(.vertical, 5)
-          if let e = manager.errors[c] { Text(e).font(.caption).foregroundStyle(.orange) }
+        VStack(spacing: 8) {
+          ForEach(AppCommand.allCases) { c in
+            VStack(alignment: .leading, spacing: 4) {
+              HStack {
+                Toggle(
+                  c.title,
+                  isOn: Binding(
+                    get: {
+                      manager.configuration.bindings.first { $0.command == c }?.isEnabled ?? false
+                    },
+                    set: { v in
+                      var b =
+                        manager.configuration.bindings.first { $0.command == c }
+                        ?? ShortcutBinding(command: c, keyCode: 0, isEnabled: false)
+                      b.isEnabled = v
+                      manager.update(b)
+                    })
+                ).frame(width: 210, alignment: .leading)
+                Spacer()
+                Button {
+                  manager.suspend()
+                  recording = c
+                } label: {
+                  Text(manager.label(c))
+                    .font(VantaTheme.Font.number)
+                    .frame(width: 136)
+                    .padding(.vertical, 5)
+                    .vantaSurfaceCard(radius: VantaTheme.Radius.small)
+                }.buttonStyle(.plain)
+                VantaIconButton(title: "Clear", icon: "xmark", compact: true) { manager.clear(c) }
+              }
+              if let e = manager.errors[c] {
+                Text(e).font(VantaTheme.Font.caption).foregroundStyle(VantaTheme.Palette.warning)
+              }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .vantaSurfaceCard(radius: VantaTheme.Radius.small)
+          }
         }
       }
-      Button("استعادة الافتراضي") { manager.reset() }
-    }.padding(20).sheet(item: $recording, onDismiss: { manager.resume() }) { c in
+      VantaIconButton(title: "Restore Defaults", icon: "arrow.counterclockwise", compact: true) {
+        manager.reset()
+      }
+    }
+    .padding(20)
+    .sheet(item: $recording, onDismiss: { manager.resume() }) { c in
       VStack(spacing: 16) {
-        Text("اضغط اختصار \(c.title)").font(.headline)
-        Text("⌃ / ⌥ / ⌘ + مفتاح • Esc للإلغاء")
+        Image(systemName: "keyboard").font(.system(size: 26, weight: .semibold))
+          .foregroundStyle(VantaTheme.Palette.accent)
+        Text("Press a shortcut for \(c.title)").font(VantaTheme.Font.title)
+        Text("⌃ / ⌥ / ⌘ + a key • Esc to cancel")
+          .font(VantaTheme.Font.caption)
+          .foregroundStyle(VantaTheme.Palette.textSecondary)
         ShortcutRecorderView(
           onRecord: { b in
             recording = nil
             manager.resume()
             if let b { manager.update(b) }
           }, command: c
-        ).frame(width: 300, height: 70)
-        Button("إلغاء") { recording = nil }
-      }.padding(30)
+        )
+        .frame(width: 300, height: 64)
+        .overlay(
+          Text("Waiting for a key combination…")
+            .font(VantaTheme.Font.label)
+            .foregroundStyle(VantaTheme.Palette.accent)
+            .allowsHitTesting(false)
+        )
+        .vantaSurfaceCard(radius: VantaTheme.Radius.medium, isSelected: true)
+        VantaIconButton(title: "Cancel", icon: "xmark", role: .destructive, compact: true) {
+          recording = nil
+        }
+      }
+      .padding(28)
+      .vantaWindowBackground()
+      .foregroundStyle(VantaTheme.Palette.text)
+      .preferredColorScheme(.dark)
+      .environment(\.layoutDirection, .leftToRight)
     }.onDisappear { manager.resume() }
   }
 }

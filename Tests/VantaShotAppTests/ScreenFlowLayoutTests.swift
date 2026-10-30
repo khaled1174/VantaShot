@@ -60,10 +60,24 @@ final class ScreenFlowLayoutTests: XCTestCase {
 
   // MARK: History presentation
 
-  func testMediaKindFriendlyNamesAreArabic() {
-    XCTAssertEqual(MediaKind.stillImage.friendlyName, "صورة")
+  func testMediaKindFriendlyNamesAreEnglish() {
+    XCTAssertEqual(MediaKind.stillImage.friendlyName, "Image")
     XCTAssertEqual(MediaKind.animatedImage.friendlyName, "GIF")
-    XCTAssertEqual(MediaKind.video.friendlyName, "فيديو")
+    XCTAssertEqual(MediaKind.video.friendlyName, "Video")
+  }
+
+  func testInterfaceCatalogHasNoArabicCopy() {
+    let labels =
+      AppCommand.allCases.map(\.title)
+      + AnnotationTool.allCases.map(\.title)
+      + CaptureMode.allCases.flatMap { [$0.rawValue, $0.hudTitle] }
+      + [MediaKind.stillImage, .animatedImage, .video].map(\.friendlyName)
+      + BackgroundTemplate.all.map(\.name)
+    for label in labels {
+      XCTAssertFalse(
+        label.unicodeScalars.contains { (0x0600...0x06FF).contains(Int($0.value)) },
+        "Arabic UI copy remains: \(label)")
+    }
   }
 
   func testHistoryFilterMatchesTitleAndKind() {
@@ -76,7 +90,7 @@ final class ScreenFlowLayoutTests: XCTestCase {
     XCTAssertEqual(HistoryFilter(query: "safari", kind: nil).apply(to: [a, b]).map(\.id), [a.id])
     XCTAssertEqual(HistoryFilter(query: "", kind: .video).apply(to: [a, b]).map(\.id), [b.id])
     XCTAssertEqual(HistoryFilter(query: "", kind: nil).apply(to: [a, b]).count, 2)
-    XCTAssertEqual(HistoryFilter(query: "فيديو", kind: nil).apply(to: [a, b]).map(\.id), [b.id])
+    XCTAssertEqual(HistoryFilter(query: "video", kind: nil).apply(to: [a, b]).map(\.id), [b.id])
   }
 
   // MARK: Editor inspector
@@ -137,5 +151,22 @@ final class MeterAndSelectionTests: XCTestCase {
     XCTAssertEqual(s.ids, Set(ids[0..<2]))
     s.clear()
     XCTAssertTrue(s.isEmpty)
+  }
+
+  func testSelectModeTogglesWithPlainClickAndSelectAllEntersIt() {
+    let ids = (0..<4).map { _ in UUID() }
+    var s = HistorySelectionModel()
+    s.isSelecting = true
+    s.click(ids[0], in: ids, command: false, shift: false)
+    s.click(ids[2], in: ids, command: false, shift: false)
+    XCTAssertEqual(s.ids, [ids[0], ids[2]])
+    s.click(ids[0], in: ids, command: false, shift: false)
+    XCTAssertEqual(s.ids, [ids[2]])
+    s.endSelecting()
+    XCTAssertFalse(s.isSelecting)
+    XCTAssertTrue(s.isEmpty)
+    s.selectAll(ids)
+    XCTAssertTrue(s.isSelecting)
+    XCTAssertEqual(s.ids, Set(ids))
   }
 }

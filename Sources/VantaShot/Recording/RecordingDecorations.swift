@@ -10,9 +10,9 @@ import os
   private static let logger = Logger(subsystem: "dev.vantashot.macos", category: "Decorations")
   /// Keystroke capture needs the Input Monitoring permission; returns the current state and prompts once.
   static func keystrokeMonitoringAllowed(prompt: Bool) -> Bool {
-    if CGPreflightListenEventAccess() { return true }
-    if prompt { _ = CGRequestListenEventAccess() }
-    return false
+    if ScreenCaptureService.hasInputMonitoringPermission { return true }
+    if prompt { ScreenCaptureService.promptInputMonitoringOnce() }
+    return ScreenCaptureService.hasInputMonitoringPermission
   }
   private var haloWindow: NSWindow?
   private var haloView: CursorHaloView?
@@ -71,8 +71,8 @@ import os
       Self.logger.info("keystroke overlay requested; input monitoring granted=\(allowed, privacy: .public)")
       if !allowed {
         ToastBannerHUD.shared.show(
-          message: "ضغطات المفاتيح تحتاج إذن «مراقبة الإدخال»",
-          subtitle: "فعّله من إعدادات النظام ← الخصوصية والأمان ثم أعد التسجيل",
+          message: "Keystrokes need Input Monitoring permission.",
+          subtitle: "Turn it on in System Settings → Privacy & Security, then record again.",
           icon: "exclamationmark.triangle")
       }
       let size = CGSize(width: 320, height: 54)
@@ -197,6 +197,7 @@ struct KeystrokeCapsuleView: View {
         bump = true
         withAnimation(VantaTheme.Motion.spring) { bump = false }
       }
+      .environment(\.layoutDirection, .leftToRight)
   }
 }
 

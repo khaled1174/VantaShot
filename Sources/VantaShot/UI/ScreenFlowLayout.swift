@@ -57,9 +57,9 @@ enum CountdownSequence {
 extension MediaKind {
   var friendlyName: String {
     switch self {
-    case .stillImage: return "صورة"
+    case .stillImage: return "Image"
     case .animatedImage: return "GIF"
-    case .video: return "فيديو"
+    case .video: return "Video"
     }
   }
   var icon: String {
@@ -106,14 +106,14 @@ struct BackgroundTemplate: Identifiable, Equatable {
   let second: RGBA
 
   static let all: [BackgroundTemplate] = [
-    .init(id: "ocean", name: "محيط", first: RGBA(0.10, 0.50, 0.95), second: RGBA(0.40, 0.20, 0.80)),
-    .init(id: "sunset", name: "غروب", first: RGBA(0.98, 0.45, 0.30), second: RGBA(0.75, 0.20, 0.55)),
-    .init(id: "mint", name: "نعناع", first: RGBA(0.18, 0.80, 0.62), second: RGBA(0.10, 0.45, 0.75)),
-    .init(id: "gold", name: "ذهبي", first: RGBA(0.98, 0.76, 0.28), second: RGBA(0.90, 0.40, 0.25)),
-    .init(id: "night", name: "ليل", first: RGBA(0.10, 0.12, 0.22), second: RGBA(0.25, 0.20, 0.45)),
-    .init(id: "rose", name: "وردي", first: RGBA(0.95, 0.55, 0.75), second: RGBA(0.60, 0.30, 0.85)),
-    .init(id: "graphite", name: "رمادي", first: RGBA(0.30, 0.32, 0.36), second: RGBA(0.12, 0.13, 0.16)),
-    .init(id: "lime", name: "ليموني", first: RGBA(0.70, 0.90, 0.30), second: RGBA(0.15, 0.65, 0.45)),
+    .init(id: "ocean", name: "Ocean", first: RGBA(0.10, 0.50, 0.95), second: RGBA(0.40, 0.20, 0.80)),
+    .init(id: "sunset", name: "Sunset", first: RGBA(0.98, 0.45, 0.30), second: RGBA(0.75, 0.20, 0.55)),
+    .init(id: "mint", name: "Mint", first: RGBA(0.18, 0.80, 0.62), second: RGBA(0.10, 0.45, 0.75)),
+    .init(id: "gold", name: "Gold", first: RGBA(0.98, 0.76, 0.28), second: RGBA(0.90, 0.40, 0.25)),
+    .init(id: "night", name: "Night", first: RGBA(0.10, 0.12, 0.22), second: RGBA(0.25, 0.20, 0.45)),
+    .init(id: "rose", name: "Rose", first: RGBA(0.95, 0.55, 0.75), second: RGBA(0.60, 0.30, 0.85)),
+    .init(id: "graphite", name: "Graphite", first: RGBA(0.30, 0.32, 0.36), second: RGBA(0.12, 0.13, 0.16)),
+    .init(id: "lime", name: "Lime", first: RGBA(0.70, 0.90, 0.30), second: RGBA(0.15, 0.65, 0.45)),
   ]
 
   var gradient: LinearGradient {
@@ -153,6 +153,8 @@ enum AudioLevelMeter {
 struct HistorySelectionModel: Equatable {
   var ids: Set<UUID> = []
   private(set) var anchor: UUID?
+  /// Select mode: a plain click adds or removes an item, like ⌘-click.
+  var isSelecting = false
 
   var isEmpty: Bool { ids.isEmpty }
   func contains(_ id: UUID) -> Bool { ids.contains(id) }
@@ -163,7 +165,7 @@ struct HistorySelectionModel: Equatable {
       ids = Set(ordered[min(a, b)...max(a, b)])
       return
     }
-    if command {
+    if command || isSelecting {
       if ids.contains(id) { ids.remove(id) } else { ids.insert(id) }
     } else {
       ids = [id]
@@ -173,10 +175,15 @@ struct HistorySelectionModel: Equatable {
   mutating func selectAll(_ ordered: [UUID]) {
     ids = Set(ordered)
     anchor = ordered.first
+    isSelecting = true
   }
   mutating func clear() {
     ids = []
     anchor = nil
+  }
+  mutating func endSelecting() {
+    clear()
+    isSelecting = false
   }
   mutating func prune(keeping ordered: [UUID]) {
     ids = ids.intersection(ordered)

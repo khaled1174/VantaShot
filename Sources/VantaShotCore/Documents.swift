@@ -28,21 +28,21 @@ public enum AnnotationTool: String, Codable, CaseIterable, Sendable {
     counter, pixelate, redact, spotlight, image
   public var title: String {
     switch self {
-    case .select: return "تحريك"
-    case .crop: return "قص"
-    case .arrow: return "سهم"
-    case .rectangle: return "إطار"
-    case .filledRect: return "تعبئة"
-    case .ellipse: return "دائرة"
-    case .line: return "خط"
-    case .freehand: return "قلم"
-    case .highlighter: return "تظليل"
-    case .text: return "نص"
-    case .counter: return "ترقيم"
-    case .pixelate: return "تمويه"
-    case .redact: return "حجب"
-    case .spotlight: return "إبراز"
-    case .image: return "صورة"
+    case .select: return "Move"
+    case .crop: return "Crop"
+    case .arrow: return "Arrow"
+    case .rectangle: return "Rectangle"
+    case .filledRect: return "Fill"
+    case .ellipse: return "Circle"
+    case .line: return "Line"
+    case .freehand: return "Pen"
+    case .highlighter: return "Highlight"
+    case .text: return "Text"
+    case .counter: return "Number"
+    case .pixelate: return "Pixelate"
+    case .redact: return "Redact"
+    case .spotlight: return "Spotlight"
+    case .image: return "Image"
     }
   }
   public var icon: String {

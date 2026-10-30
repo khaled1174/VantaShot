@@ -26,14 +26,16 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>dev.vantashot.macos</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
     <key>CFBundleName</key>
     <string>VantaShot</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.3.0</string>
+    <string>1.3.1</string>
     <key>CFBundleVersion</key>
-    <string>6</string>
+    <string>7</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>NSHighResolutionCapable</key>
@@ -41,19 +43,76 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>يستخدم VantaShot الميكروفون فقط عند اختيار تضمينه في تسجيل الفيديو.</string>
+    <string>VantaShot uses the microphone only when you choose to include it in a video recording.</string>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>يحتاج VantaShot إلى إذن التقاط الشاشة لتصوير المناطق والنوافذ وتسجيل الفيديو.</string>
+    <string>VantaShot needs screen recording permission to capture areas and windows and to record video.</string>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>VantaShot Project</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>dev.vantashot.project</string>
+            </array>
+        </dict>
+    </array>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.json</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeDescription</key>
+            <string>VantaShot Project</string>
+            <key>UTTypeIdentifier</key>
+            <string>dev.vantashot.project</string>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>vantashot</string>
+                </array>
+            </dict>
+        </dict>
+    </array>
 </dict>
 </plist>
 PLIST
 
-CERT_HASH=$(security find-identity -v -p codesigning | awk '/Apple Development/ {print $2; exit}')
+# Screen Recording permission is tied to the signing identity. Prefer the stable
+# Developer ID already used for release so a rebuild does not clear the switch.
+# Fall back to Apple Development, then an ad-hoc signature.
+CERT_HASH=$(security find-identity -v -p codesigning | awk '/"Developer ID Application:/ {print $2; exit}')
+SIGN_LABEL="Developer ID Application"
+if [ -z "${CERT_HASH:-}" ]; then
+    CERT_HASH=$(security find-identity -v -p codesigning | awk '/Apple Development/ {print $2; exit}')
+    SIGN_LABEL="Apple Development"
+fi
 if [ -n "${CERT_HASH:-}" ]; then
-    codesign --force --deep --sign "$CERT_HASH" "$APP_DIR"
-    echo "Signed with Apple Development certificate: $CERT_HASH"
+    codesign --force --sign "$CERT_HASH" --options runtime \
+        --entitlements Resources/Distribution.entitlements "$APP_DIR"
+    echo "Signed with ${SIGN_LABEL}: $CERT_HASH"
 else
     codesign --force --deep --sign - "$APP_DIR"
     echo "Signed with ad-hoc signature"
+    SIGN_LABEL="ad-hoc"
 fi
+
+# macOS keeps old grants under the previous signature. The switch then looks on
+# in System Settings, but every check fails. Clear them once after a change.
+LAST_SIGN_FILE="dist/.signing-identity"
+if [ -f "$LAST_SIGN_FILE" ] && [ "$(cat "$LAST_SIGN_FILE")" != "$SIGN_LABEL" ]; then
+    echo "warning: signing identity changed from '$(cat "$LAST_SIGN_FILE")' to '$SIGN_LABEL'."
+    echo "warning: run: tccutil reset ScreenCapture dev.vantashot.macos" \
+        "&& tccutil reset Accessibility dev.vantashot.macos" \
+        "&& tccutil reset ListenEvent dev.vantashot.macos"
+fi
+echo "$SIGN_LABEL" > "$LAST_SIGN_FILE"
 echo "Built: $(pwd)/$APP_DIR"

@@ -11,6 +11,7 @@ enum VantaTheme {
   }
   enum Palette {
     static let accent = Color(red: 0.16, green: 0.85, blue: 0.98)
+    static let accentDeep = Color(red: 0.06, green: 0.58, blue: 0.88)
     static let accentText = Color(red: 0.02, green: 0.09, blue: 0.14)
     static let success = Color(red: 0.18, green: 0.88, blue: 0.62)
     static let danger = Color(red: 1.0, green: 0.33, blue: 0.33)
@@ -21,6 +22,63 @@ enum VantaTheme {
     static let fillHover = Color.white.opacity(0.14)
     static let text = Color.white
     static let textSecondary = Color.white.opacity(0.68)
+
+    static let accentGradient = LinearGradient(
+      colors: [
+        Color(red: 0.26, green: 0.90, blue: 1.0),
+        Color(red: 0.10, green: 0.72, blue: 0.94),
+      ],
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing
+    )
+
+    static let windowTintGradient = LinearGradient(
+      stops: [
+        .init(color: Color(red: 0.06, green: 0.09, blue: 0.16).opacity(0.68), location: 0.0),
+        .init(color: Color(red: 0.04, green: 0.06, blue: 0.11).opacity(0.76), location: 0.55),
+        .init(color: Color(red: 0.03, green: 0.04, blue: 0.08).opacity(0.84), location: 1.0),
+      ],
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing
+    )
+
+    static let specularRim = LinearGradient(
+      stops: [
+        .init(color: Color.white.opacity(0.36), location: 0.0),
+        .init(color: Color.white.opacity(0.13), location: 0.45),
+        .init(color: Color(red: 0.16, green: 0.85, blue: 0.98).opacity(0.20), location: 1.0),
+      ],
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing
+    )
+
+    static let surfaceRim = LinearGradient(
+      stops: [
+        .init(color: Color.white.opacity(0.24), location: 0.0),
+        .init(color: Color.white.opacity(0.08), location: 0.5),
+        .init(color: Color.white.opacity(0.04), location: 1.0),
+      ],
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing
+    )
+
+    static let surfaceGradient = LinearGradient(
+      colors: [
+        Color.white.opacity(0.10),
+        Color.white.opacity(0.04),
+      ],
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing
+    )
+
+    static let surfaceHoverGradient = LinearGradient(
+      colors: [
+        Color.white.opacity(0.16),
+        Color.white.opacity(0.07),
+      ],
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing
+    )
   }
   enum Font {
     static let body = SwiftUI.Font.system(size: 13, weight: .regular)
@@ -80,9 +138,18 @@ struct VantaGlassCardModifier: ViewModifier {
         ZStack {
           VantaGlassMaterial(material: material, cornerRadius: radius)
           shape.fill(tint)
+          shape.fill(
+            LinearGradient(
+              colors: [Color.white.opacity(0.08), Color.clear, Color.black.opacity(0.14)],
+              startPoint: .top,
+              endPoint: .bottom
+            )
+          )
         }
       )
-      .overlay(shape.strokeBorder(VantaTheme.Palette.stroke, lineWidth: 1))
+      .overlay(
+        shape.strokeBorder(VantaTheme.Palette.specularRim, lineWidth: 1)
+      )
       .clipShape(shape)
       .shadow(
         color: .black.opacity(shadow ? VantaTheme.Shadow.opacity : 0),
@@ -90,8 +157,104 @@ struct VantaGlassCardModifier: ViewModifier {
   }
 }
 
+struct VantaSurfaceCardModifier: ViewModifier {
+  var radius: CGFloat
+  var isSelected: Bool
+  var isHovering: Bool
+  var shadow: Bool
+
+  func body(content: Content) -> some View {
+    let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+    content
+      .background(
+        ZStack {
+          shape.fill(
+            isSelected
+              ? AnyShapeStyle(
+                LinearGradient(
+                  colors: [
+                    VantaTheme.Palette.accent.opacity(0.18),
+                    VantaTheme.Palette.accent.opacity(0.07),
+                  ],
+                  startPoint: .topLeading,
+                  endPoint: .bottomTrailing
+                ))
+              : AnyShapeStyle(
+                isHovering
+                  ? VantaTheme.Palette.surfaceHoverGradient
+                  : VantaTheme.Palette.surfaceGradient)
+          )
+        }
+      )
+      .overlay(
+        shape.strokeBorder(
+          isSelected
+            ? AnyShapeStyle(VantaTheme.Palette.accent)
+            : isHovering
+              ? AnyShapeStyle(
+                LinearGradient(
+                  colors: [
+                    VantaTheme.Palette.accent.opacity(0.65),
+                    Color.white.opacity(0.18),
+                  ],
+                  startPoint: .topLeading,
+                  endPoint: .bottomTrailing
+                ))
+              : AnyShapeStyle(VantaTheme.Palette.surfaceRim),
+          lineWidth: isSelected ? 1.5 : 1
+        )
+      )
+      .clipShape(shape)
+      .shadow(
+        color: isSelected
+          ? VantaTheme.Palette.accent.opacity(0.18)
+          : .black.opacity(shadow ? 0.25 : 0),
+        radius: shadow || isSelected ? 12 : 0,
+        y: shadow || isSelected ? 4 : 0
+      )
+  }
+}
+
+struct VantaWindowBackgroundModifier: ViewModifier {
+  var material: NSVisualEffectView.Material
+  func body(content: Content) -> some View {
+    content
+      .background(
+        ZStack {
+          VantaGlassMaterial(material: material, cornerRadius: 0)
+          VantaTheme.Palette.windowTintGradient
+          RadialGradient(
+            colors: [
+              VantaTheme.Palette.accent.opacity(0.09),
+              Color.clear,
+            ],
+            center: .topLeading,
+            startRadius: 10,
+            endRadius: 420
+          )
+        }
+        .ignoresSafeArea()
+      )
+  }
+}
+
+@MainActor enum VantaWindowGlass {
+  /// Configures an `NSWindow` so its content view's behind-window blur shines through cleanly.
+  static func configure(_ window: NSWindow) {
+    window.isReleasedWhenClosed = false
+    window.isOpaque = false
+    window.backgroundColor = .clear
+    window.titlebarAppearsTransparent = true
+    if !window.styleMask.contains(.fullSizeContentView) {
+      window.styleMask.insert(.fullSizeContentView)
+    }
+    window.appearance = NSAppearance(named: .darkAqua)
+    window.hasShadow = true
+  }
+}
+
 extension View {
-  /// Standard floating surface: blurred glass + hairline border + soft shadow.
+  /// Standard floating surface: blurred glass + specular hairline border + soft shadow.
   func vantaGlassCard(
     radius: CGFloat = VantaTheme.Radius.large,
     material: NSVisualEffectView.Material = .hudWindow,
@@ -100,6 +263,21 @@ extension View {
   ) -> some View {
     modifier(VantaGlassCardModifier(radius: radius, material: material, tint: tint, shadow: shadow))
   }
+  /// Inner layered glass surface used for cards, tiles, and sections inside a glass window.
+  func vantaSurfaceCard(
+    radius: CGFloat = VantaTheme.Radius.medium,
+    isSelected: Bool = false,
+    isHovering: Bool = false,
+    shadow: Bool = false
+  ) -> some View {
+    modifier(
+      VantaSurfaceCardModifier(
+        radius: radius, isSelected: isSelected, isHovering: isHovering, shadow: shadow))
+  }
+  /// Root behind-window frosted glass background for application windows.
+  func vantaWindowBackground(material: NSVisualEffectView.Material = .hudWindow) -> some View {
+    modifier(VantaWindowBackgroundModifier(material: material))
+  }
   /// Dark text/number badge used inside overlays (size labels, coordinates).
   func vantaBadge() -> some View {
     self
@@ -107,7 +285,7 @@ extension View {
       .foregroundStyle(VantaTheme.Palette.text)
       .padding(.horizontal, 10).padding(.vertical, 5)
       .background(Capsule().fill(Color(red: 0.05, green: 0.07, blue: 0.12).opacity(0.9)))
-      .overlay(Capsule().strokeBorder(VantaTheme.Palette.stroke, lineWidth: 1))
+      .overlay(Capsule().strokeBorder(VantaTheme.Palette.specularRim, lineWidth: 1))
   }
 }
 
@@ -151,6 +329,7 @@ struct VantaIconButton: View {
         RoundedRectangle(cornerRadius: VantaTheme.Radius.small, style: .continuous)
           .strokeBorder(border, lineWidth: 1)
       )
+      .shadow(color: glowColor, radius: hovering || role == .prominent || isSelected ? 10 : 0, y: 3)
       .scaleEffect(hovering ? 1.03 : 1)
       .animation(VantaTheme.Motion.fade, value: hovering)
       .animation(VantaTheme.Motion.fade, value: isSelected)
@@ -167,20 +346,72 @@ struct VantaIconButton: View {
     case .neutral: return isSelected ? VantaTheme.Palette.accentText : VantaTheme.Palette.text
     }
   }
-  private var fill: Color {
+  private var fill: AnyShapeStyle {
     switch role {
-    case .prominent: return VantaTheme.Palette.accent
-    case .destructive: return VantaTheme.Palette.danger.opacity(hovering ? 0.22 : 0.12)
+    case .prominent:
+      return AnyShapeStyle(VantaTheme.Palette.accentGradient)
+    case .destructive:
+      return AnyShapeStyle(
+        LinearGradient(
+          colors: [
+            VantaTheme.Palette.danger.opacity(hovering ? 0.28 : 0.16),
+            VantaTheme.Palette.danger.opacity(hovering ? 0.16 : 0.08),
+          ],
+          startPoint: .topLeading,
+          endPoint: .bottomTrailing
+        ))
     case .neutral:
-      if isSelected { return VantaTheme.Palette.accent }
-      return hovering ? VantaTheme.Palette.fillHover : VantaTheme.Palette.fillSubtle
+      if isSelected { return AnyShapeStyle(VantaTheme.Palette.accentGradient) }
+      return AnyShapeStyle(
+        hovering ? VantaTheme.Palette.surfaceHoverGradient : VantaTheme.Palette.surfaceGradient)
     }
   }
-  private var border: Color {
+  private var border: AnyShapeStyle {
     switch role {
-    case .prominent: return VantaTheme.Palette.accent.opacity(0.9)
-    case .destructive: return VantaTheme.Palette.danger.opacity(0.4)
-    case .neutral: return isSelected ? VantaTheme.Palette.accent : .clear
+    case .prominent:
+      return AnyShapeStyle(
+        LinearGradient(
+          colors: [Color.white.opacity(0.55), VantaTheme.Palette.accent.opacity(0.85)],
+          startPoint: .topLeading,
+          endPoint: .bottomTrailing
+        ))
+    case .destructive:
+      return AnyShapeStyle(
+        LinearGradient(
+          colors: [
+            VantaTheme.Palette.danger.opacity(hovering ? 0.65 : 0.45),
+            VantaTheme.Palette.danger.opacity(0.20),
+          ],
+          startPoint: .topLeading,
+          endPoint: .bottomTrailing
+        ))
+    case .neutral:
+      if isSelected {
+        return AnyShapeStyle(
+          LinearGradient(
+            colors: [Color.white.opacity(0.5), VantaTheme.Palette.accent],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+          ))
+      }
+      return AnyShapeStyle(
+        hovering
+          ? LinearGradient(
+            colors: [VantaTheme.Palette.accent.opacity(0.55), Color.white.opacity(0.16)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+          )
+          : VantaTheme.Palette.surfaceRim
+      )
+    }
+  }
+  private var glowColor: Color {
+    switch role {
+    case .prominent: return VantaTheme.Palette.accent.opacity(hovering ? 0.42 : 0.25)
+    case .destructive: return VantaTheme.Palette.danger.opacity(hovering ? 0.25 : 0)
+    case .neutral:
+      if isSelected { return VantaTheme.Palette.accent.opacity(0.28) }
+      return hovering ? VantaTheme.Palette.accent.opacity(0.14) : .clear
     }
   }
 }
@@ -202,12 +433,15 @@ enum VantaPanelMotion {
     }
   }
   /// Fades the panel out, then runs `completion` (typically `orderOut`/`close`).
-  @MainActor static func dismiss(_ panel: NSWindow, completion: @escaping () -> Void) {
+  @MainActor static func dismiss(_ panel: NSWindow, completion: @escaping @MainActor () -> Void) {
     NSAnimationContext.runAnimationGroup(
       { ctx in
         ctx.duration = VantaTheme.Motion.fadeDuration
         panel.animator().alphaValue = 0
-      }, completionHandler: completion)
+      },
+      completionHandler: {
+        MainActor.assumeIsolated { completion() }
+      })
   }
 }
 
@@ -257,13 +491,22 @@ enum SelectionSnapper {
 enum QuickAccessCardLayout {
   static let margin: CGFloat = 20
   static let gap: CGFloat = 12
+  /// Cards stack upward from the bottom-leading corner, then continue in the next column.
   static func frame(index: Int, cardSize: CGSize, visibleFrame: CGRect) -> CGRect {
-    CGRect(
-      x: visibleFrame.minX + margin,
-      y: visibleFrame.minY + margin + CGFloat(index) * (cardSize.height + gap),
+    let rows = rowsPerColumn(cardSize: cardSize, visibleFrame: visibleFrame)
+    let column = index / rows
+    let row = index % rows
+    return CGRect(
+      x: visibleFrame.minX + margin + CGFloat(column) * (cardSize.width + gap),
+      y: visibleFrame.minY + margin + CGFloat(row) * (cardSize.height + gap),
       width: cardSize.width, height: cardSize.height)
   }
-  static func autoDismissDuration(settingSeconds: Int) -> TimeInterval? {
-    settingSeconds > 0 ? TimeInterval(settingSeconds) : nil
+  /// How many cards fit on the screen without overlapping. Always at least one.
+  static func capacity(cardSize: CGSize, visibleFrame: CGRect) -> Int {
+    let columns = Int((visibleFrame.width - 2 * margin + gap) / (cardSize.width + gap))
+    return rowsPerColumn(cardSize: cardSize, visibleFrame: visibleFrame) * max(1, columns)
+  }
+  private static func rowsPerColumn(cardSize: CGSize, visibleFrame: CGRect) -> Int {
+    max(1, Int((visibleFrame.height - 2 * margin + gap) / (cardSize.height + gap)))
   }
 }

@@ -6,7 +6,7 @@ case "$MODE" in run|--verify|--debug|--logs|--telemetry) ;; *) printf 'Usage: %s
 APP_PATH="$(pwd)/dist/VantaShot.app"
 for pid in $(pgrep -x VantaShot || true); do
   COMMAND_PATH="$(ps -ww -p "$pid" -o args=)"
-  if [[ "$COMMAND_PATH" == *"/my-version/VantaShot/dist/VantaShot.app/Contents/MacOS/VantaShot"* ]]; then kill -TERM "$pid"; fi
+  if [[ "$COMMAND_PATH" == *"$APP_PATH/Contents/MacOS/VantaShot"* || "$COMMAND_PATH" == *"/dist/VantaShot.app/Contents/MacOS/VantaShot"* ]]; then kill -TERM "$pid"; fi
 done
 ./bundle-app.sh
 ./script/verify_release.sh

@@ -5,17 +5,18 @@ import ScreenCaptureKit
 import SwiftUI
 import UniformTypeIdentifiers
 import Vision
+import VantaShotCore
 
 // MARK: - Capture Mode Definition
 
 public enum CaptureMode: String, CaseIterable, Identifiable {
-  case allInOne = "الكل في واحد"
-  case area = "منطقة"
-  case window = "نافذة"
-  case fullscreen = "شاشة كاملة"
-  case scrolling = "تمرير متدرج"
-  case ocr = "نسخ نص OCR"
-  case record = "تسجيل فيديو/GIF"
+  case allInOne = "All in One"
+  case area = "Area"
+  case window = "Window"
+  case fullscreen = "Full Screen"
+  case scrolling = "Scrolling Capture"
+  case ocr = "Copy OCR Text"
+  case record = "Record Video or GIF"
 
   public var id: String { rawValue }
 
@@ -58,18 +59,133 @@ public struct DetectedWindowInfo {
 
 @MainActor
 public enum ScreenCaptureService {
+  public static let didChangeNotification = Notification.Name(
+    "dev.vantashot.permissionsChanged")
+
+  /// Set when ScreenCaptureKit actually returns content. `CGPreflightScreenCaptureAccess`
+  /// stays false after the user enables the switch until this process is replaced.
+  private static var screenCaptureProven = false
+  private static var screenPrompt = SystemPermissionPrompt()
+  private static var accessibilityPrompt = SystemPermissionPrompt()
+  private static var inputPrompt = SystemPermissionPrompt()
 
   public static var hasScreenPermission: Bool {
-    CGPreflightScreenCaptureAccess()
+    screenCaptureProven || CGPreflightScreenCaptureAccess()
   }
 
+  /// Records that this launch already hit a denial. Does not ask macOS again.
+  public static func noteScreenAccessDeniedBySystem() {
+    guard !screenPrompt.didRequestThisLaunch else { return }
+    screenPrompt.didRequestThisLaunch = true
+    signalChange()
+  }
+
+  public static func noteScreenCaptureAvailable() {
+    guard !screenCaptureProven else { return }
+    screenCaptureProven = true
+    signalChange()
+  }
+
+  /// Asks macOS once per launch so VantaShot is listed under Screen Recording, then
+  /// only opens the pane. Asking again in the same launch can flip the switch back off.
   public static func requestPermissionAndOpenSettings() {
-    _ = CGRequestScreenCaptureAccess()
-    if let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-    {
-      NSWorkspace.shared.open(url)
+    if hasScreenPermission { return }
+    switch screenPrompt.step(granted: false) {
+    case .alreadyOn:
+      return
+    case .requestOnce:
+      screenPrompt.didRequestThisLaunch = true
+      if CGRequestScreenCaptureAccess() {
+        noteScreenCaptureAvailable()
+        return
+      }
+      fallthrough
+    case .openSettingsOnly:
+      screenPrompt.didOpenSettings = true
+      openPrivacy("Privacy_ScreenCapture")
+      signalChange()
     }
+  }
+
+  public static func refreshAfterForeground() {
+    if CGPreflightScreenCaptureAccess() { noteScreenCaptureAvailable() }
+  }
+
+  public static var hasMicrophonePermission: Bool {
+    AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+  }
+
+  public static func requestMicrophonePermissionAndOpenSettings() {
+    let status = AVCaptureDevice.authorizationStatus(for: .audio)
+    if status == .notDetermined {
+      AVCaptureDevice.requestAccess(for: .audio) { _ in
+        Task { @MainActor in signalChange() }
+      }
+    } else if status != .authorized {
+      openPrivacy("Privacy_Microphone")
+    }
+  }
+
+  public static var hasAccessibilityPermission: Bool {
+    AXIsProcessTrusted()
+  }
+
+  public static func requestAccessibilityPermissionAndOpenSettings() {
+    if hasAccessibilityPermission { return }
+    switch accessibilityPrompt.step(granted: false) {
+    case .alreadyOn:
+      return
+    case .requestOnce:
+      accessibilityPrompt.didRequestThisLaunch = true
+      let promptKey = "AXTrustedCheckOptionPrompt"
+      if AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary) { return }
+      fallthrough
+    case .openSettingsOnly:
+      accessibilityPrompt.didOpenSettings = true
+      openPrivacy("Privacy_Accessibility")
+      signalChange()
+    }
+  }
+
+  public static var hasInputMonitoringPermission: Bool {
+    CGPreflightListenEventAccess()
+  }
+
+  /// Used while arming a recording. Prompts once and does not open Settings on every take.
+  public static func promptInputMonitoringOnce() {
+    if hasInputMonitoringPermission || inputPrompt.didRequestThisLaunch { return }
+    inputPrompt.didRequestThisLaunch = true
+    _ = CGRequestListenEventAccess()
+  }
+
+  public static func requestInputMonitoringPermissionAndOpenSettings() {
+    if hasInputMonitoringPermission { return }
+    switch inputPrompt.step(granted: false) {
+    case .alreadyOn:
+      return
+    case .requestOnce:
+      inputPrompt.didRequestThisLaunch = true
+      if CGRequestListenEventAccess() { return }
+      fallthrough
+    case .openSettingsOnly:
+      inputPrompt.didOpenSettings = true
+      openPrivacy("Privacy_ListenEvent")
+      signalChange()
+    }
+  }
+
+  private static func openPrivacy(_ anchor: String) {
+    let urls = [
+      "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?\(anchor)",
+      "x-apple.systempreferences:com.apple.preference.security?\(anchor)",
+    ]
+    for raw in urls {
+      if let url = URL(string: raw), NSWorkspace.shared.open(url) { return }
+    }
+  }
+
+  private static func signalChange() {
+    NotificationCenter.default.post(name: didChangeNotification, object: nil)
   }
 
   public static func captureAppKitRect(_ rect: CGRect) async throws -> NSImage {
@@ -116,7 +232,7 @@ public enum ScreenCaptureService {
         continue
       }
 
-      let owner = (entry[kCGWindowOwnerName as String] as? String) ?? "تطبيق"
+      let owner = (entry[kCGWindowOwnerName as String] as? String) ?? "App"
       let title = (entry[kCGWindowName as String] as? String) ?? owner
       let appKitRect = CGRect(
         x: cgRect.minX,
@@ -170,8 +286,11 @@ public final class ToastBannerHUD {
     VantaPanelMotion.dismiss(p) { p.close() }
   }
 
-  public func show(message: String, subtitle: String? = nil, icon: String = "checkmark.circle.fill")
-  {
+  public func show(
+    message: String, subtitle: String? = nil, icon: String = "checkmark.circle.fill",
+    duration: TimeInterval? = nil
+  ) {
+    let duration = duration ?? Self.autoHideSeconds
     dismissTask?.cancel()
     panel?.close()
     panel = nil
@@ -217,7 +336,7 @@ public final class ToastBannerHUD {
     VantaPanelMotion.present(p, from: CGPoint(x: 0, y: 16))
     panel = p
     dismissTask = Task { @MainActor [weak self] in
-      try? await Task.sleep(nanoseconds: UInt64(Self.autoHideSeconds * 1_000_000_000))
+      try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
       guard !Task.isCancelled, self?.panel === p else { return }
       self?.hide()
     }
@@ -256,7 +375,7 @@ struct ToastBannerView: View {
     .padding(.vertical, 10)
     .frame(height: height)
     .vantaGlassCard(radius: height / 2, shadow: false)
-    .environment(\.layoutDirection, .rightToLeft)
+    .environment(\.layoutDirection, .leftToRight)
     .onAppear { withAnimation(VantaTheme.Motion.spring.delay(0.08)) { iconShown = true } }
   }
 }

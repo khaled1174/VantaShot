@@ -199,8 +199,8 @@ public final class SelectionOverlayController: ObservableObject {
         guard !Task.isCancelled, self.generation == id else { return }
         ScreenCaptureService.playShutterSound()
         let label =
-          win.map { "نافذة: \($0.ownerName)" }
-          ?? "لقطة \u{2066}\(image.size.width.formatted()) × \(image.size.height.formatted())\u{2069}"
+          win.map { "Window: \($0.ownerName)" }
+          ?? "Capture \(image.size.width.formatted()) × \(image.size.height.formatted())"
         switch preferredAction {
         case "annotate": callback?(.openAnnotate(image, label))
         case "copy": callback?(.copyDirectly(image))
@@ -221,8 +221,7 @@ public final class SelectionOverlayController: ObservableObject {
       } catch {
         guard !Task.isCancelled, self.generation == id else { return }
         self.pending = nil
-        ToastBannerHUD.shared.show(
-          message: error.localizedDescription, icon: "exclamationmark.triangle")
+        AssetFiles.showError(error)
         self.onCancelled?()
       }
     }
@@ -453,7 +452,7 @@ final class NativeCaptureOverlayNSView: NSView {
 
       drawPillLabel(
         text:
-          "\u{200E}\(winInfo.ownerName)  —  \(Int(winRect.width))×\(Int(winRect.height))  (اضغط للالتقاط)",
+          "\(winInfo.ownerName)  —  \(Int(winRect.width))×\(Int(winRect.height))  (click to capture)",
         at: CGPoint(x: winRect.midX, y: max(90, winRect.minY - 22))
       )
     } else if let sel = controller.selectionRect, sel.width > 4, sel.height > 4 {
@@ -482,7 +481,7 @@ final class NativeCaptureOverlayNSView: NSView {
       }
 
       drawPillLabel(
-        text: "\u{200E}\(Int(sel.width)) × \(Int(sel.height)) نقطة",
+        text: "\(Int(sel.width)) × \(Int(sel.height)) pt",
         at: CGPoint(x: sel.midX, y: min(bounds.height - 40, sel.maxY + 20))
       )
     }
@@ -606,13 +605,13 @@ extension CaptureMode {
   /// Short label that fits the HUD; the full `rawValue` stays for menus and commands.
   var hudTitle: String {
     switch self {
-    case .allInOne: return "الكل"
-    case .area: return "منطقة"
-    case .window: return "نافذة"
-    case .fullscreen: return "الشاشة"
-    case .scrolling: return "تمرير"
-    case .ocr: return "نص"
-    case .record: return "تسجيل"
+    case .allInOne: return "All"
+    case .area: return "Area"
+    case .window: return "Window"
+    case .fullscreen: return "Screen"
+    case .scrolling: return "Scroll"
+    case .ocr: return "Text"
+    case .record: return "Record"
     }
   }
   var hudShortcut: String? { self == .allInOne ? nil : shortcutKey }
@@ -631,31 +630,31 @@ struct OverlayBottomHUDView: View {
       if actionsVisible {
         HStack(spacing: 4) {
           VantaIconButton(
-            title: "التقاط", icon: "checkmark", shortcut: "⏎", role: .prominent, compact: true
+            title: "Capture", icon: "checkmark", shortcut: "⏎", role: .prominent, compact: true
           ) {
             controller.finishWithCurrentSelection()
           }
           Divider().frame(height: 26).padding(.horizontal, 2)
-          VantaIconButton(title: "تعديل", icon: "pencil.and.outline", compact: true) {
+          VantaIconButton(title: "Edit", icon: "pencil.and.outline", compact: true) {
             controller.finishWithCurrentSelection(preferredAction: "annotate")
           }
-          VantaIconButton(title: "نسخ", icon: "doc.on.doc", compact: true) {
+          VantaIconButton(title: "Copy", icon: "doc.on.doc", compact: true) {
             controller.finishWithCurrentSelection(preferredAction: "copy")
           }
-          VantaIconButton(title: "حفظ", icon: "square.and.arrow.down", compact: true) {
+          VantaIconButton(title: "Save", icon: "square.and.arrow.down", compact: true) {
             controller.finishWithCurrentSelection(preferredAction: "save")
           }
-          VantaIconButton(title: "تثبيت", icon: "pin", compact: true) {
+          VantaIconButton(title: "Pin", icon: "pin", compact: true) {
             controller.finishWithCurrentSelection(preferredAction: "pin")
           }
-          VantaIconButton(title: "نص", icon: "text.viewfinder", compact: true) {
+          VantaIconButton(title: "Text", icon: "text.viewfinder", compact: true) {
             controller.finishWithCurrentSelection(preferredAction: "ocr")
           }
-          VantaIconButton(title: "تمرير", icon: "arrow.up.and.down.text.horizontal", compact: true)
+          VantaIconButton(title: "Scroll", icon: "arrow.up.and.down.text.horizontal", compact: true)
           {
             controller.finishWithCurrentSelection(preferredAction: "scroll")
           }
-          VantaIconButton(title: "تسجيل", icon: "record.circle", compact: true) {
+          VantaIconButton(title: "Record", icon: "record.circle", compact: true) {
             controller.finishWithCurrentSelection(preferredAction: "record")
           }
         }
@@ -678,7 +677,7 @@ struct OverlayBottomHUDView: View {
           }
         }
         Divider().frame(height: 30).padding(.horizontal, 4)
-        VantaIconButton(title: "إلغاء", icon: "xmark", shortcut: "Esc", role: .destructive) {
+        VantaIconButton(title: "Cancel", icon: "xmark", shortcut: "Esc", role: .destructive) {
           controller.cancelAndRestoreLauncher()
         }
       }
@@ -687,6 +686,6 @@ struct OverlayBottomHUDView: View {
     }
     .padding(VantaTheme.Shadow.radius + VantaTheme.Shadow.y)
     .animation(VantaTheme.Motion.spring, value: actionsVisible)
-    .environment(\.layoutDirection, .rightToLeft)
+    .environment(\.layoutDirection, .leftToRight)
   }
 }

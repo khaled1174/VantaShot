@@ -51,8 +51,12 @@ PLIST=dist/VantaShot.app/Contents/Info.plist
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${PLIST}")"
 BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "${PLIST}")"
 [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "${BUILD}" =~ ^[0-9]+$ ]] || die 'Bundle version values are invalid.'
-ARCH="$(lipo -archs dist/VantaShot.app/Contents/MacOS/VantaShot)"
-[[ "${ARCH}" == arm64 || "${ARCH}" == x86_64 ]] || die "Unsupported release architectures: ${ARCH}"
+RAW_ARCH="$(lipo -archs dist/VantaShot.app/Contents/MacOS/VantaShot)"
+case "${RAW_ARCH}" in
+    arm64|x86_64) ARCH="${RAW_ARCH}" ;;
+    "arm64 x86_64"|"x86_64 arm64") ARCH="universal" ;;
+    *) die "Unsupported release architectures: ${RAW_ARCH}" ;;
+esac
 
 # A unique output directory preserves previous releases and submission records.
 mkdir -p dist

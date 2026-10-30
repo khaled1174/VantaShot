@@ -94,4 +94,18 @@ final class AsyncWorkflowTests: XCTestCase {
     controller.cancel()
     await b.release()
   }
+  @MainActor func testAutoScrollRequestsAccessibilityPermissionWhenUntrusted() {
+    _ = NSApplication.shared
+    let controller = LiveScrollingCaptureController()
+    defer { controller.cancel() }
+    var prompted = false
+    controller.isAccessibilityTrusted = { false }
+    controller.requestAccessibilityPermission = { prompted = true }
+    controller.start(
+      rectInAppKit: CGRect(x: 50, y: 50, width: 100, height: 80), initialImage: image()
+    ) { _ in }
+    controller.toggleAutoScroll()
+    XCTAssertTrue(prompted)
+    XCTAssertFalse(controller.isAutoScrolling)
+  }
 }

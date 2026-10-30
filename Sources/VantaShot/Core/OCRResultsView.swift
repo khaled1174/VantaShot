@@ -11,11 +11,11 @@ import VantaShotCore
     if window == nil {
       let w = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
-        styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered,
+        defer: false)
       w.isReleasedWhenClosed = false
-      w.title = "النص المستخرج والروابط"
-      w.titlebarAppearsTransparent = true
-      w.backgroundColor = NSColor(red: 0.06, green: 0.075, blue: 0.12, alpha: 1)
+      w.title = "Extracted Text and Links"
+      VantaWindowGlass.configure(w)
       w.center()
       window = w
     }
@@ -29,46 +29,47 @@ struct OCRResultView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
-        Label("النص المستخرج", systemImage: "text.viewfinder").font(VantaTheme.Font.title)
+        Label("Extracted Text", systemImage: "text.viewfinder").font(VantaTheme.Font.title)
         Spacer()
-        Text("\u{2066}\(result.text.count)\u{2069} حرفًا").font(VantaTheme.Font.caption)
+        Text("\(result.text.count) \(result.text.count == 1 ? "character" : "characters")").font(VantaTheme.Font.caption)
           .foregroundStyle(VantaTheme.Palette.textSecondary)
-        VantaIconButton(title: "نسخ الكل", icon: "doc.on.doc", role: .prominent, compact: true) {
+        VantaIconButton(title: "Copy All", icon: "doc.on.doc", role: .prominent, compact: true) {
           NSPasteboard.general.clearContents()
           NSPasteboard.general.setString(result.text, forType: .string)
-          ToastBannerHUD.shared.show(message: "تم نسخ النص", icon: "text.viewfinder")
+          ToastBannerHUD.shared.show(message: "Text copied", icon: "text.viewfinder")
         }
       }
       ScrollView {
         Text(result.text).font(VantaTheme.Font.body).textSelection(.enabled)
           .frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
-      .background(
-        RoundedRectangle(cornerRadius: VantaTheme.Radius.medium, style: .continuous)
-          .fill(VantaTheme.Palette.fillSubtle))
+      .vantaSurfaceCard(radius: VantaTheme.Radius.medium)
       if !result.detectedURLs.isEmpty {
-        Text("الروابط المكتشفة").font(VantaTheme.Font.label)
+        Text("Detected links").font(VantaTheme.Font.label)
           .foregroundStyle(VantaTheme.Palette.textSecondary)
         ForEach(result.detectedURLs, id: \.absoluteString) { u in
           HStack {
             Text(u.absoluteString).font(VantaTheme.Font.number).textSelection(.enabled).lineLimit(1)
               .truncationMode(.middle)
             Spacer()
-            PillButton(icon: "safari", help: "فتح الرابط") { NSWorkspace.shared.open(u) }
-            PillButton(icon: "doc.on.doc", help: "نسخ الرابط") {
+            PillButton(icon: "safari", help: "Open link") { NSWorkspace.shared.open(u) }
+            PillButton(icon: "doc.on.doc", help: "Copy link") {
               NSPasteboard.general.clearContents()
               NSPasteboard.general.setString(u.absoluteString, forType: .string)
             }
           }
+          .padding(.horizontal, 10).padding(.vertical, 6)
+          .vantaSurfaceCard(radius: VantaTheme.Radius.small)
         }
       }
     }
     .frame(minWidth: 500, minHeight: 360)
     .padding(18)
-    .background(Color(red: 0.06, green: 0.075, blue: 0.12))
+    .padding(.top, 16)
+    .vantaWindowBackground()
     .foregroundStyle(VantaTheme.Palette.text)
     .preferredColorScheme(.dark)
-    .environment(\.layoutDirection, .rightToLeft)
+    .environment(\.layoutDirection, .leftToRight)
   }
 }
 
@@ -142,25 +143,25 @@ struct OCRFloatingBarView: View {
       Image(systemName: "text.viewfinder").font(.system(size: 18, weight: .semibold))
         .foregroundStyle(VantaTheme.Palette.success)
       VStack(alignment: .leading, spacing: 2) {
-        Text("نُسخ \u{2066}\(result.text.count)\u{2069} حرفًا إلى الحافظة").font(VantaTheme.Font.label)
+        Text("Copied \(result.text.count) \(result.text.count == 1 ? "character" : "characters") to the clipboard").font(VantaTheme.Font.label)
         Text(result.text.replacingOccurrences(of: "\n", with: " ")).font(VantaTheme.Font.caption)
           .foregroundStyle(VantaTheme.Palette.textSecondary).lineLimit(1).truncationMode(.tail)
       }
       Spacer(minLength: 6)
       if !result.detectedURLs.isEmpty {
         VantaIconButton(
-          title: "الروابط", icon: "link", shortcut: "\u{2066}\(result.detectedURLs.count)\u{2069}",
+          title: "Links", icon: "link", shortcut: "\(result.detectedURLs.count)",
           compact: true, action: onOpen)
       }
-      VantaIconButton(title: "فتح النص", icon: "doc.text", role: .prominent, compact: true, action: onOpen)
-      PillButton(icon: "xmark", help: "إغلاق", action: onClose)
+      VantaIconButton(title: "Open Text", icon: "doc.text", role: .prominent, compact: true, action: onOpen)
+      PillButton(icon: "xmark", help: "Close", action: onClose)
     }
     .padding(.horizontal, 14).padding(.vertical, 8)
     .frame(width: OCRFloatingBar.size.width, height: OCRFloatingBar.size.height)
     .vantaGlassCard(radius: OCRFloatingBar.size.height / 2, shadow: false)
     .foregroundStyle(VantaTheme.Palette.text)
     .preferredColorScheme(.dark)
-    .environment(\.layoutDirection, .rightToLeft)
+    .environment(\.layoutDirection, .leftToRight)
     .onHover(perform: onHover)
   }
 }

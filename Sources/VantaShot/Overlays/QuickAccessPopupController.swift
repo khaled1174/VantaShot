@@ -69,8 +69,8 @@ import VantaShotCore
     p.clearContents()
     guard p.writeObjects([item]) else { throw StorageError.invalidData }
     ToastBannerHUD.shared.show(
-      message: "تم النسخ",
-      subtitle: asset.kind == .stillImage ? "صورة واحدة جاهزة للصق" : "ملف التسجيل الأصلي جاهز للصق"
+      message: "Copied",
+      subtitle: asset.kind == .stillImage ? "One image is ready to paste." : "The original recording is ready to paste."
     )
     return true
   }
@@ -87,10 +87,18 @@ import VantaShotCore
     } else {
       url = try MediaExportService().export(asset, to: AppSettings.shared.outputDirectory)
     }
-    ToastBannerHUD.shared.show(message: "تم حفظ الملف", subtitle: url.lastPathComponent)
+    ToastBannerHUD.shared.show(message: "File saved", subtitle: url.lastPathComponent)
     return url
   }
   static func showError(_ error: Error) {
+    if let capture = error as? CaptureError, capture == .permissionDenied {
+      ToastBannerHUD.shared.show(
+        message: "Screen Recording blocked this capture.",
+        subtitle: "Turn VantaShot on in Screen & System Audio Recording. If it is already on, quit the app and open it once.",
+        icon: "exclamationmark.triangle",
+        duration: 6)
+      return
+    }
     ToastBannerHUD.shared.show(
       message: error.localizedDescription, icon: "exclamationmark.triangle")
   }
@@ -98,7 +106,6 @@ import VantaShotCore
 @MainActor public final class QuickAccessPopupController: ObservableObject {
   public static let shared = QuickAccessPopupController()
   static let cardSize = CGSize(width: 324, height: 268)
-  static let maxVisibleCards = 3
   private struct Card {
     let panel: NSPanel
     let asset: MediaAsset
@@ -114,13 +121,18 @@ import VantaShotCore
     if let existing = cards.first(where: { $0.asset.id == asset.id }) {
       remove(existing.panel, animated: false)
     }
-    while cards.count >= Self.maxVisibleCards, let oldest = cards.first {
-      remove(oldest.panel, animated: true)
-    }
+    showAfterCapture()
     guard
       let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
         ?? NSScreen.main
     else { return }
+    // Keep earlier cards. Drop the oldest only when the screen has no room left;
+    // it stays in History.
+    let capacity = QuickAccessCardLayout.capacity(
+      cardSize: Self.cardSize, visibleFrame: screen.visibleFrame)
+    while cards.count >= capacity, let oldest = cards.first {
+      remove(oldest.panel, animated: true)
+    }
     let frame = QuickAccessCardLayout.frame(
       index: cards.count, cardSize: Self.cardSize, visibleFrame: screen.visibleFrame)
     let p = NSPanel(
@@ -135,11 +147,9 @@ import VantaShotCore
     p.acceptsMouseMovedEvents = true
     p.isMovableByWindowBackground = false
     p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-    let autoDismiss = QuickAccessCardLayout.autoDismissDuration(
-      settingSeconds: AppSettings.shared.quickAccessAutoDismissSeconds)
     p.contentView = NSHostingView(
       rootView: QuickAccessCardView(
-        asset: asset, autoDismiss: autoDismiss,
+        asset: asset,
         onClose: { [weak self, weak p] in
           guard let p else { return }
           self?.close(p)
@@ -152,10 +162,13 @@ import VantaShotCore
   public func dismiss() {
     for card in cards { close(card.panel) }
   }
-  /// Hides the cards without recording a close (a new capture is about to replace them).
+  /// Moves the cards out of the way while the user picks the next area. They stay
+  /// in the list and come back with `showAfterCapture()`.
   public func hideForCapture() {
     for card in cards { card.panel.orderOut(nil) }
-    cards = []
+  }
+  public func showAfterCapture() {
+    for card in cards where !card.panel.isVisible { card.panel.orderFrontRegardless() }
   }
   private func close(_ panel: NSPanel) {
     guard let card = cards.first(where: { $0.panel === panel }) else { return }
@@ -186,7 +199,7 @@ import VantaShotCore
   }
   @discardableResult public static func copyImageToClipboard(_ image: NSImage) -> Bool {
     do {
-      let a = try AssetFiles.makeImage(image, title: "صورة")
+      let a = try AssetFiles.makeImage(image, title: "Image")
       return try AssetFiles.copy(a)
     } catch {
       AssetFiles.showError(error)
@@ -194,7 +207,7 @@ import VantaShotCore
     }
   }
   @discardableResult public static func saveImageToDesktop(_ image: NSImage) -> URL? {
-    do { return try AssetFiles.save(AssetFiles.makeImage(image, title: "صورة")) } catch {
+    do { return try AssetFiles.save(AssetFiles.makeImage(image, title: "Image")) } catch {
       AssetFiles.showError(error)
       return nil
     }
@@ -203,11 +216,7 @@ import VantaShotCore
 
 struct QuickAccessCardView: View {
   let asset: MediaAsset
-  let autoDismiss: TimeInterval?
   let onClose: () -> Void
-  @State private var hovering = false
-  @State private var remaining: TimeInterval = 0
-  @State private var ticker: Task<Void, Never>?
 
   private var kindLabel: String {
     switch asset.kind {
@@ -231,13 +240,13 @@ struct QuickAccessCardView: View {
           .foregroundStyle(VantaTheme.Palette.accent)
         Text(asset.title).font(VantaTheme.Font.label).lineLimit(1)
         Spacer()
-        Text("\u{2066}\(asset.pixelSize.width) × \(asset.pixelSize.height) • \(kindLabel)\u{2069}")
+        Text("\(asset.pixelSize.width) × \(asset.pixelSize.height) • \(kindLabel)")
           .font(VantaTheme.Font.number).foregroundStyle(VantaTheme.Palette.textSecondary)
         Button(action: onClose) {
           Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
             .frame(width: 20, height: 20)
             .background(Circle().fill(VantaTheme.Palette.fillSubtle))
-        }.buttonStyle(.plain).help("إغلاق")
+        }.buttonStyle(.plain).help("Close")
       }
       Group {
         if let image = AssetFiles.preview(asset) {
@@ -245,7 +254,7 @@ struct QuickAccessCardView: View {
             image: image, fileURL: asset.kind == .stillImage ? nil : asset.fileURL,
             onDoubleClick: open, onDragCompleted: onClose)
         } else {
-          Label("المعاينة غير متاحة", systemImage: "film")
+          Label("Preview unavailable", systemImage: "film")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(VantaTheme.Palette.fillSubtle)
         }
@@ -256,52 +265,41 @@ struct QuickAccessCardView: View {
         RoundedRectangle(cornerRadius: VantaTheme.Radius.small, style: .continuous)
           .strokeBorder(VantaTheme.Palette.stroke, lineWidth: 1))
       HStack(spacing: 4) {
-        VantaIconButton(title: "نسخ", icon: "doc.on.doc", role: .prominent, compact: true) {
+        VantaIconButton(title: "Copy", icon: "doc.on.doc", role: .prominent, compact: true) {
           do {
             try AssetFiles.copy(asset)
             onClose()
           } catch { AssetFiles.showError(error) }
         }
-        VantaIconButton(title: "حفظ", icon: "square.and.arrow.down", compact: true) {
+        VantaIconButton(title: "Save", icon: "square.and.arrow.down", compact: true) {
           do {
             try AssetFiles.save(asset)
             onClose()
           } catch { AssetFiles.showError(error) }
         }
         VantaIconButton(
-          title: asset.kind == .stillImage ? "تعديل" : "تشغيل",
+          title: asset.kind == .stillImage ? "Edit" : "Play",
           icon: asset.kind == .stillImage ? "pencil.and.outline" : "play.fill", compact: true,
           action: open)
         if asset.kind == .stillImage {
-          VantaIconButton(title: "تثبيت", icon: "pin", compact: true) {
+          VantaIconButton(title: "Pin", icon: "pin", compact: true) {
             if let i = AssetFiles.preview(asset) {
               FloatingPinWindowManager.shared.pinImage(i, title: asset.title)
             }
           }
-          VantaIconButton(title: "نص", icon: "text.viewfinder", compact: true) {
+          VantaIconButton(title: "Text", icon: "text.viewfinder", compact: true) {
             if let i = AssetFiles.preview(asset) { OCRService.extractAndCopyText(from: i) }
           }
         } else if asset.kind == .video {
-          VantaIconButton(title: "قص", icon: "scissors", compact: true) {
+          VantaIconButton(title: "Trim", icon: "scissors", compact: true) {
             MediaTrimService.shared.show(asset)
           }
         }
         if !CleanWorkflowCoordinator.shared.history.contains(where: { $0.id == asset.id }) {
-          VantaIconButton(title: "للسجل", icon: "arrow.clockwise", compact: true) {
+          VantaIconButton(title: "To History", icon: "arrow.clockwise", compact: true) {
             CleanWorkflowCoordinator.shared.addExternalAsset(asset)
           }
         }
-      }
-      if let autoDismiss {
-        GeometryReader { geo in
-          Capsule().fill(VantaTheme.Palette.fillSubtle)
-            .overlay(alignment: .trailing) {
-              Capsule().fill(VantaTheme.Palette.accent.opacity(hovering ? 0.35 : 0.8))
-                .frame(width: geo.size.width * max(0, remaining / autoDismiss))
-            }
-        }
-        .frame(height: 3)
-        .help(hovering ? "الإخفاء التلقائي متوقف أثناء التحويم" : "تُخفى تلقائيًا")
       }
     }
     .padding(14)
@@ -311,29 +309,7 @@ struct QuickAccessCardView: View {
     .vantaGlassCard(radius: VantaTheme.Radius.large, shadow: false)
     .foregroundStyle(VantaTheme.Palette.text)
     .preferredColorScheme(.dark)
-    .environment(\.layoutDirection, .rightToLeft)
-    .onHover { hovering = $0 }
-    .onAppear(perform: startTicker)
-    .onDisappear { ticker?.cancel() }
-  }
-
-  private func startTicker() {
-    guard let autoDismiss else { return }
-    remaining = autoDismiss
-    ticker?.cancel()
-    ticker = Task { @MainActor in
-      let step: TimeInterval = 0.05
-      while !Task.isCancelled {
-        try? await Task.sleep(nanoseconds: UInt64(step * 1_000_000_000))
-        guard !Task.isCancelled else { return }
-        if hovering { continue }
-        remaining -= step
-        if remaining <= 0 {
-          onClose()
-          return
-        }
-      }
-    }
+    .environment(\.layoutDirection, .leftToRight)
   }
 
   private func open() {
