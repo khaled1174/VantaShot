@@ -157,8 +157,8 @@ struct PermissionsAndAboutView: View {
 
   private var versionText: String {
     let version =
-      Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.3.0"
-    let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "6"
+      Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.3.1"
+    let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "7"
     return "Version \(version) (\(build))"
   }
 
