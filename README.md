@@ -1,9 +1,15 @@
-# VantaShot
+<div align="center">
 
-Screenshots and screen recordings for macOS, free.
+<img src="docs/images/banner.png" width="760" alt="VantaShot — Screenshots and screen recording for macOS" />
 
 One bar for area, window, full screen, scrolling pages, text (OCR), video and GIF.
 Annotate, pin, or copy without leaving the capture. Nothing leaves your Mac.
+
+**[Download for macOS](https://github.com/khaled1174/VantaShot/releases/latest)**
+&nbsp;·&nbsp;
+[What's new](CHANGELOG.md)
+
+</div>
 
 ![VantaShot on macOS](docs/images/hero-desktop.png)
 
