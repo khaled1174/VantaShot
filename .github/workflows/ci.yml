@@ -1,0 +1,54 @@
+# Package.swift declares swift-tools-version 5.9 and macOS 13, and the app is
+# Apple silicon only. The macOS 14 runner (the last image that still carried
+# Xcode 15 / Swift 5.9) was removed on 2026-11-02, so this job uses the oldest
+# supported Apple silicon image. Xcode 16.4 (Swift 6.1) is selected by path:
+# SwiftPM keeps the Swift 5 language mode from the tools version, and the
+# deployment target stays macOS 13. Pinning the path keeps a later image
+# default (Xcode 26) from changing the compiler.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: swift build and test
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Select Xcode 16.4
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app
+          xcodebuild -version
+          swift --version
+          sw_vers
+
+      - name: Cache SwiftPM build artifacts
+        uses: actions/cache@v6
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+          key: macos-15-xcode-16.4-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**/*.swift', 'Tests/**/*.swift') }}
+          restore-keys: |
+            macos-15-xcode-16.4-
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
